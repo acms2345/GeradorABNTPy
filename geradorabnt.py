@@ -2,7 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 
 import json
-from datetime import date
+from datetime import date, datetime
+import re
 
 def carregarJSONLD(jsonldsPuros):
     listaJSONLDs = []
@@ -35,7 +36,7 @@ def obterDadosABNT(soup):
     autor = []
     tipo_autor = None
     tituloCompleto= None
-    dataPublicacao = None
+    anoPublicacao = None
     dataAcesso = None
     urlSite = None
 
@@ -59,19 +60,46 @@ def obterDadosABNT(soup):
             if autorDados:
               if isinstance(autorDados, list):
                 for autorIndividual in autorDados:
-                  autor.append(autorIndividual.get('name'))
-                  autorPartesNome.append(autor[-1].strip().split())
+                  nomeCompleto = autorIndividual.get('name')
+
+                  autorPartesNome = nomeCompleto.strip().split()
+                  autorSobrenome = autorPartesNome[-1].upper()
+                  autorNomeResto = " ".join(autorPartesNome[:-1])
+
+                  autor.append({
+                      'sobrenome' : autorSobrenome,
+                      'nomeResto' : autorNomeResto
+                  })
               if isinstance(autorDados, dict):
-                autorDados = [autorDados]
-                autor = autorDados.get('name')
-                autorPartesNome = autor.strip().split()
+                autor = [autor]
+                nomeCompleto = autorDados.get('name')
+                autorPartesNome = nomeCompleto.strip().split()
                 autorSobrenome = autorPartesNome[-1].upper()
                 autorNomeResto = " ".join(autorPartesNome[:-1])
+
+                autor = {
+                    'sobrenome' : autorSobrenome,
+                    'nomeResto' : autorNomeResto
+                }
+
             
             tipo_autor = autorDados.get('@type')
 
             tituloCompleto = dadosSite.get('headline')
-            dataPublicacao = autorDados.get('datePublished')
+            dataPublicacao = dadosSite.get('datePublished')
+            if dataPublicacao:
+                try:
+                    if isinstance(dataPublicacao, (int, float)):
+                        anoPublicacao = int(dataPublicacao)
+                    elif isinstance(dataPublicacao, str):
+                        verificacao = re.search(r'\d{4}', dataPublicacao)
+                        if verificacao:
+                            anoPublicacao = int(verificacao.group(0))
+                        else:
+                            anoPublicacao = datetime.fromisoformat(dataPublicacao).year
+                except Exception:
+                    anoPublicacao = None
+            
             dataAcesso = date.today()
             urlSite = dadosSite.get('url')
             
@@ -79,45 +107,66 @@ def obterDadosABNT(soup):
 
         except Exception as e:
             dadosSite = None
-            
-
         
-
-        
-        
-        
-    """if not dadosSite and soup.find('div', class_='citacao-txt'):
-        citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
-
-    elif soup.find('p', class_='citation'):
-        citacao_abnt = (soup.find('p', class_='citation')).get_text().strip()
     
-    else:
-    
-        titulo = soup.find('h1')
-
-    return citacao_abnt"""
     return {
-      "autorSobrenome" : autorSobrenome, 
-      "autorNomeResto" : autorNomeResto,
+      "autor" : autor,
       "tipoAutor" : tipo_autor, 
       "tituloCompleto" : tituloCompleto, 
-      "dataPublicacao" : data_publicacao, 
-      "dataAcesso" : data_acesso, 
-      "url" : url
+      "anoPublicacao" : anoPublicacao, 
+      "dataAcesso" : dataAcesso, 
+      "url" : urlSite
     }
     
 
 
 def citacaoInLine(soup):
-    dadosABNT = obterDadosABNT()
+    dadosABNT = obterDadosABNT(soup)
+
+    pedacosCitacaoInLine = []
+
+    pedacosCitacaoInLine.append('(')
+
+    anoPublicacao = dadosABNT.get('anoPublicacao')
+    autor = dadosABNT.get('autor')
+    if isinstance(autor, list):
+        if len(autor) > 3:
+            texto = f"{autor[1]} et al., "
+            pedacosCitacaoInLine.append(texto)
+        else:
+            for i in range(2):
+                texto = f"{autor[i].get('sobrenome')}, "
+                pedacosCitacaoInLine.append(texto)
+
+    else:
+        sobrenome = autor.get('sobrenome')
+        pedacosCitacaoInLine.append(f"{autor[i].get('sobrenome')}, ")
+
+    pedacosCitacaoInLine.append(f"{anoPublicacao})")
+
+    citacaoInLine = "".join(pedacosCitacaoInLine)
+
+    return citacaoInLine
+
     
-    sobrenome = dadosABNT.get('autorSobrenome')
-    restoNome = dadosABNT.get('autorNomeResto')
+
+    
+    
+
     
     
 
 def citacaoRef(soup):
-    dadosABNT = obterDadosABNT()
+    dadosABNT = obterDadosABNT(soup)
+
+    if not dadosABNT:
+        if soup.find('div', class_='citacao-txt'):
+            citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
+
+        elif soup.find('p', class_='citation'):
+            citacao_abnt = (soup.find('p', class_='citation')).get_text().strip()
+    
+
+    return citacao_abnt
 
 
