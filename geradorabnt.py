@@ -4,18 +4,30 @@ from bs4 import BeautifulSoup
 import json
 from datetime import date
 
+def carregarJSONLD(jsonldsPuros):
+    listaJSONLDs = []
+    
+    for scriptTag in jsonldsPuros:
+        try:
+            conversao = json.loads(scriptTag)
+            listaJSONLDs.append(conversao)
+        except (json.JSONDecodeError, TypeError):
+            continue
+    
+    return listaJSONLDs
 
 
 def obterDadosABNT(soup):
-    """{
-    "autor": ...,
-    "tipo_autor": "pessoa" | "instituicao" | "desconhecido",
-    "titulo_parte": ...,
-    "titulo_todo": ...,   # nome do site, em itálico na hora de montar
-    "data_publicacao": ...,  # pode ser None
-    "data_acesso": ...,
-    "url": ...
-    }"""
+    """
+    São coletadas as seguintes informações:
+    autor, tipo_autor, tituloCompleto, data_publicacao, data_acesso e url.
+
+    Primeiro, é feita a análise para saber se o site possui um JSON-LD, 
+    arquivo de indexação que pode servir como base de obtenção.
+    Se tiver, coleta-se as informações com base nele.
+
+    Senão...
+    """
 
     #Essa é a estrutura a ser seguida
     autor = None
@@ -25,22 +37,44 @@ def obterDadosABNT(soup):
     dataAcesso = None
     urlSite = None
 
-    dadosABNT = None
+    dadosSite = None
 
-    if soup.find('script', type='application/ld+json'):
-        scriptTag = soup.find('script', type='application/ld+json')
-        dadosABNT = json.loads(scriptTag.string)
+    JSONLD = soup.find_all('script', type='application/ld+json')
 
-        autorDados = dadosABNT.get('author', {})
-        autor = autorDados.get('name')
-        tipo_autor = autorDados.get('@type')
-        tituloCompleto = dadosABNT.get('headline')
-        dataPublicacao = autorDados.get('datePublished')
-        dataAcesso = date.today()
-        urlSite = dadosABNT.get('url')
+    if JSONLD:
+        try:
+            for dadosSiteTeste in carregarJSONLD(JSONLD):
+                if(dadosSiteTeste.get('@type') in {'Article', 'NewsArticle', 'BlogPosting'} ): 
+                    dadosSite = dadosSiteTeste
+                    break
+            if not dadosSite:
+                raise ValueError("Nenhum JSON-LD compatível encontrado.")
+            
+            autorDados = dadosSite.get('author', {})
+            autor = autorDados.get('name')
+            autorPartesNome = autor.strip().split()
+            autorSobrenome = autorPartesNome[-1].upper()
+            autorNomeResto = " ".join(autorPartesNome[:-1])
+            
+            tipo_autor = autorDados.get('@type')
+
+            tituloCompleto = dadosSite.get('headline')
+            dataPublicacao = autorDados.get('datePublished')
+            dataAcesso = date.today()
+            urlSite = dadosSite.get('url')
+            
+
+
+        except Exception as e:
+            dadosSite = None
+            
+
+        
+
         
         
-    elif soup.find('div', class_='citacao-txt'):
+        
+    """if not dadosSite and soup.find('div', class_='citacao-txt'):
         citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
 
     elif soup.find('p', class_='citation'):
@@ -50,6 +84,13 @@ def obterDadosABNT(soup):
     
         titulo = soup.find('h1')
 
-    return citacao_abnt
+    return citacao_abnt"""
+
+
+def citacaoInLine():
+    pass
+
+def citacaoRef():
+    pass
 
 
