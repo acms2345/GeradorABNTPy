@@ -10,7 +10,7 @@ def carregarJSONLD(jsonldsPuros):
     for scriptTag in jsonldsPuros:
         try:
             conversao = json.loads(scriptTag)
-            listaJSONLDs.append(conversao)
+            listaJSONLDs.append(conversao.string)
         except (json.JSONDecodeError, TypeError):
             continue
     
