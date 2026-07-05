@@ -21,6 +21,8 @@ def obterDadosABNT(soup):
     """
     São coletadas as seguintes informações:
     autor, tipo_autor, tituloCompleto, data_publicacao, data_acesso e url.
+    
+    Esses são retornados em um dicionário
 
     Primeiro, é feita a análise para saber se o site possui um JSON-LD, 
     arquivo de indexação que pode servir como base de obtenção.
@@ -30,7 +32,7 @@ def obterDadosABNT(soup):
     """
 
     #Essa é a estrutura a ser seguida
-    autor = None
+    autor = []
     tipo_autor = None
     tituloCompleto= None
     dataPublicacao = None
@@ -51,10 +53,20 @@ def obterDadosABNT(soup):
                 raise ValueError("Nenhum JSON-LD compatível encontrado.")
             
             autorDados = dadosSite.get('author', {})
-            autor = autorDados.get('name')
-            autorPartesNome = autor.strip().split()
-            autorSobrenome = autorPartesNome[-1].upper()
-            autorNomeResto = " ".join(autorPartesNome[:-1])
+            
+            
+            
+            if autorDados:
+              if isinstance(autorDados, list):
+                for autorIndividual in autorDados:
+                  autor.append(autorIndividual.get('name'))
+                  autorPartesNome.append(autor[-1].strip().split())
+              if isinstance(autorDados, dict):
+                autorDados = [autorDados]
+                autor = autorDados.get('name')
+                autorPartesNome = autor.strip().split()
+                autorSobrenome = autorPartesNome[-1].upper()
+                autorNomeResto = " ".join(autorPartesNome[:-1])
             
             tipo_autor = autorDados.get('@type')
 
@@ -85,12 +97,27 @@ def obterDadosABNT(soup):
         titulo = soup.find('h1')
 
     return citacao_abnt"""
+    return {
+      "autorSobrenome" : autorSobrenome, 
+      "autorNomeResto" : autorNomeResto,
+      "tipoAutor" : tipo_autor, 
+      "tituloCompleto" : tituloCompleto, 
+      "dataPublicacao" : data_publicacao, 
+      "dataAcesso" : data_acesso, 
+      "url" : url
+    }
+    
 
 
-def citacaoInLine():
-    pass
+def citacaoInLine(soup):
+    dadosABNT = obterDadosABNT()
+    
+    sobrenome = dadosABNT.get('autorSobrenome')
+    restoNome = dadosABNT.get('autorNomeResto')
+    
+    
 
-def citacaoRef():
-    pass
+def citacaoRef(soup):
+    dadosABNT = obterDadosABNT()
 
 
