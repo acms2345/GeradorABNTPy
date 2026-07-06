@@ -100,7 +100,10 @@ def obterDadosABNT(soup):
                 except Exception:
                     anoPublicacao = None
             
-            dataAcesso = date.today()
+            dataAcessoPura = date.today()
+
+            meses = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.']
+            dataAcesso = f"{dataAcessoPura.day} {meses[dataAcessoPura.month - 1]} {dataAcessoPura.year}"
             urlSite = dadosSite.get('url')
             
 
