@@ -25,8 +25,30 @@ def carregarJSONLD(jsonldsPuros):
     
     return listaJSONLDs
 
+def obterTituloABNT(soup, dadosJSONSite):
+    if dadosJSONSite.get('headline'):
+        return dadosJSONSite.get('headline')
+    elif soup.find('h1'):
+        return soup.find('h1')
+    else:
+        return soup.title
+    
+def obterNomeSiteABNT(soup, dadosJSONSite):
+    if dadosJSONSite:
+        nomeSiteDados = dadosJSONSite.get('publisher', {})
+        if nomeSiteDados:
+            return nomeSiteDados.get('name')
+        elif dadosJSONSite.get('name'):
+            return dadosJSONSite.get('name')
+    
+    meta_site = soup.find("meta", property="og:site_name")
 
-def obterDadosABNT(soup):
+    if meta_site:
+        nome_site = meta_site.get("content")
+        return nome_site
+
+
+def obterDadosABNT(soup, urlSite):
     """
     São coletadas as seguintes informações:
     autor, tipo_autor, tituloCompleto, data_publicacao, data_acesso e url.
@@ -37,7 +59,7 @@ def obterDadosABNT(soup):
     arquivo de indexação que pode servir como base de obtenção.
     Se tiver, coleta-se as informações com base nele.
 
-    Senão...
+    Senão, há o fallback individual para cada informação.
     """
 
     #Essa é a estrutura a ser seguida
@@ -47,7 +69,7 @@ def obterDadosABNT(soup):
     nomeSite = None
     anoPublicacao = None
     dataAcesso = None
-    urlSite = None
+    
 
     dadosSite = None
 
@@ -111,16 +133,6 @@ def obterDadosABNT(soup):
                     })
 
             
-            
-
-            tituloCompleto = dadosSite.get('headline')
-
-            nomeSiteDados = dadosSite.get('publisher', {})
-            if nomeSiteDados:
-                nomeSite = nomeSiteDados.get('name')
-            elif dadosSite.get('name'):
-                nomeSite = dadosSite.get('name')
-            
             dataPublicacao = dadosSite.get('datePublished')
             if dataPublicacao:
                 try:
@@ -135,7 +147,6 @@ def obterDadosABNT(soup):
                 except Exception:
                     anoPublicacao = None
                 
-            urlSite = dadosSite.get('url')
             
             
             
@@ -143,6 +154,9 @@ def obterDadosABNT(soup):
 
         except Exception as e:
             dadosSite = None
+
+        tituloCompleto = obterTituloABNT(dadosSite)
+        nomeSite = obterNomeSiteABNT(soup, dadosSite)
         
     dataAcessoPura = date.today()
 
@@ -175,10 +189,35 @@ def obterDadosABNT(soup):
             "id" : urlSite
         }
     
+def inicializar_citeproc(dados_json, caminho_csl):
+    """Inicializa a fonte de dados e o motor do CSL."""
+    fonte = CiteProcJSON(dados_json)
+    estilo = CitationStylesStyle(caminho_csl, locale='pt-BR', validate=False)
+    # Usamos plain para texto puro ou html para manter itálicos/negritos
+    return CitationStylesBibliography(estilo, fonte, formatter.plain)
+
+bibliografia = None #Será preenchido por citacaoInLine()
+
+def citacaoInLine(soup, url):
+    dadosABNT = obterDadosABNT(soup, url)
+
+    id = dadosABNT.get('id')
+
+    dadosBibliograficos = [dadosABNT]
+
+    global bibliografia
+
+    bibliografia = inicializar_citeproc(dadosBibliograficos, 'ibict-abnt.csl')
+
+    print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
 
 
-def citacaoInLine(soup):
-    dadosABNT = obterDadosABNT(soup)
+
+    
+    citacao = Citation([CitationItem(id)])
+    bibliografia.register(citacao)
+
+    return bibliografia.cite(citacao, lambda x: None)
 
     pedacosCitacaoInLine = []
 
@@ -204,7 +243,6 @@ def citacaoInLine(soup):
 
     citacaoInLine = "".join(pedacosCitacaoInLine)
 
-    return bibliografia.cite(citacao, lambda x: None)
 
     
 
@@ -214,23 +252,20 @@ def citacaoInLine(soup):
     
     
 
-def citacaoRef(soup):
-    dadosABNT = obterDadosABNT(soup)
+def citacaoRef(soup, url):
+    dadosABNT = obterDadosABNT(soup, url)
 
-    id = dadosABNT.get('id')
+    if bibliografia is None:
+        return "Erro: Você precisa chamar citacaoInLine antes de gerar a referência."
+    
 
-    dadosBibliograficos = [dadosABNT]
-
-    print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
-
-    fonteCiteprocPY = CiteProcJSON(dadosBibliograficos)
-    estilo = CitationStylesStyle('ibict-abnt.csl', validate=False)
-
-
-    # 3. Criar a bibliografia e registrar citação
-    bibliografia = CitationStylesBibliography(estilo, fonteCiteprocPY, formatter.html)
-    citacao = Citation([CitationItem(id)])
-    bibliografia.register(citacao)
+    referencias = list(bibliografia.bibliography())
+    
+    if referencias:
+        # Pega o primeiro item [0] e converte em texto puro
+        return str(referencias[0])
+    
+    
 
     pedacosCitacaoRef = []
 
@@ -241,6 +276,6 @@ def citacaoRef(soup):
         elif soup.find('p', class_='citation'):
             citacao_abnt = (soup.find('p', class_='citation')).get_text().strip()
 
-    return bibliografia.cite(citacao, lambda x: None)
-
+    return "Nenhuma referência encontrada."
+    
 
