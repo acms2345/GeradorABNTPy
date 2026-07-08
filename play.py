@@ -18,7 +18,7 @@ while True:
     if doc.status_code == 200:
         soup = BeautifulSoup(doc.content, 'html.parser')
 
-        print(geradorabnt.obterDadosABNT(soup))
+        print(geradorabnt.citacaoRef(soup))
     else:
         print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
 
