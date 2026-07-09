@@ -13,6 +13,8 @@ from citeproc import formatter
 from citeproc import Citation, CitationItem
 from citeproc.source.json import CiteProcJSON
 
+import unicodedata
+
 def carregarJSONLD(jsonldsPuros):
     listaJSONLDs = []
     
@@ -25,6 +27,7 @@ def carregarJSONLD(jsonldsPuros):
     
     return listaJSONLDs
 
+
 def obterTituloABNT(soup, dadosJSONSite):
     if dadosJSONSite.get('headline'):
         return dadosJSONSite.get('headline')
@@ -32,7 +35,113 @@ def obterTituloABNT(soup, dadosJSONSite):
         return soup.find('h1')
     else:
         return soup.title
+
+def obterAutorABNT(soup, dadosSite):
+    autor = []
     
+    if dadosSite:
+    
+        autorDados = dadosSite.get('author', {})
+        
+        if autorDados:
+            if isinstance(autorDados, list):
+                for autorIndividual in autorDados:
+                    
+                    nomeCompleto = autorIndividual.get('name')
+
+                    if autorIndividual.get('@type') == 'Organization' or tipo_autor == 'Organization':
+                        tipo_autor = 'Organization'
+
+                        nomeCompleto = nomeCompleto.upper()
+
+                        autor.append({'instituicao' : nomeCompleto})
+                        continue
+
+                
+                
+                    
+                    autorPartesNome = nomeCompleto.strip().split()
+                    autorSobrenome = autorPartesNome[-1].upper()
+                    autorNomeResto = " ".join(autorPartesNome[:-1])
+
+
+                    autor.append({
+                        'family' : autorSobrenome,
+                        'given' : autorNomeResto
+                    })
+            if isinstance(autorDados, dict):
+                nomeCompleto = autorDados.get('name')
+                tipo_autor = autorDados.get('@type')
+
+                if tipo_autor == 'Organization':
+                    nomeCompleto = nomeCompleto.upper()
+                    autor = {
+                        'literal' : nomeCompleto
+                    }
+                else:
+                    autorPartesNome = nomeCompleto.strip().split()
+                    autorSobrenome = autorPartesNome[-1].upper()
+                    autorNomeResto = " ".join(autorPartesNome[:-1])
+
+                    autor.append({
+                        'family' : autorSobrenome,
+                        'given' : autorNomeResto
+                    })
+    else:
+        metatagValido = False
+
+        seletores_meta = [
+        {'name': 'author'},
+        {'property': 'article:author'}]
+
+        for seletor in seletores_meta:
+            metadadosAutor = soup.find('meta', attrs=seletor)
+            if metadadosAutor and metadadosAutor.get('content'):
+                nomeAutorTeste = metadadosAutor.get('content')
+                if seletor == {'property': 'article:author'}:
+                    padraoUrls = r"http*"
+                    if re.search(nomeAutorTeste, padraoUrls):
+                        pass
+                nomeAutorTesteLimpo = nomeAutorTeste.strip().lower()
+                nomeAutorTesteLimpo = ''.join(c for c in unicodedata.normalize('NFD', nomeAutorTesteLimpo)
+                    if unicodedata.category(c) != 'Mn')
+                
+                blacklist_exata = {
+                    'admin', 'administrator', 'root', 'system', 'sistema', 'webmaster', 'cms', 'wordpress', 'blogger',
+                    'none', 'null', 'nil', 'na', 'not applicable', 'unknown', 'desconhecido', 'undefined', 'indefinido',
+                    'teste', 'test', 'author', 'autor', 'editor', 'writer', 'staff', 'contributor', 'colaborador',
+                    'anonymous', 'anon', 'anonimo', 'user', 'usuario', 'guest', 'visitante', 'convidado', 'profile', 'perfil',
+                    'membro', 'member', 'site', 'website', 'homepage', 'web'
+                }
+
+                if nomeAutorTesteLimpo in blacklist_exata: pass
+
+                if len(nomeAutorTesteLimpo) < 3 or not any(c.isalpha() for c in nomeAutorTesteLimpo):
+                    pass
+                termos_parciais = [
+                    r'\bequipe\b', r'\bsuporte\b', r'\batendimento\b', r'\bredacao\b', 
+                    r'\breporter\b', r'\breportagem\b', r'\bjornalismo\b', r'\bcomunicacao\b', 
+                    r'\bconteudo\b', r'\bagencia\b'
+                ]
+                
+                # Compila os termos em uma única expressão regular separada por "OU" (|)
+                regex_parcial = re.compile('|'.join(termos_parciais))
+                
+                if regex_parcial.search(nomeAutorTesteLimpo):
+                    pass
+                
+                autorPartesNome = nomeAutorTeste.strip().split()
+                autorSobrenome = autorPartesNome[-1].upper()
+                autorNomeResto = " ".join(autorPartesNome[:-1])
+
+                autor.append({
+                    'family' : autorSobrenome,
+                    'given' : autorNomeResto
+                })
+
+    return autor
+
+        
 def obterNomeSiteABNT(soup, dadosJSONSite):
     if dadosJSONSite:
         nomeSiteDados = dadosJSONSite.get('publisher', {})
@@ -46,6 +155,26 @@ def obterNomeSiteABNT(soup, dadosJSONSite):
     if meta_site:
         nome_site = meta_site.get("content")
         return nome_site
+    
+def obterAnoPublicacao(dadosJSONSite, soup):
+    dataPublicacao = dadosJSONSite.get('datePublished')
+    if dataPublicacao:
+        if isinstance(dataPublicacao, (int, float)):
+            return int(dataPublicacao)
+        elif isinstance(dataPublicacao, str):
+            verificacao = re.search(r'\d{4}', dataPublicacao)
+            if verificacao:
+                return int(verificacao.group(0))
+            else:
+                return datetime.fromisoformat(dataPublicacao).year
+    else:
+        meta_site = soup.find("meta", property="article:published_time")
+
+        if meta_site:
+            anoPublicacao = meta_site.get("content")
+            return anoPublicacao
+        else: 
+            return None
 
 
 def obterDadosABNT(soup, urlSite):
@@ -68,7 +197,6 @@ def obterDadosABNT(soup, urlSite):
     tituloCompleto= None
     nomeSite = None
     anoPublicacao = None
-    dataAcesso = None
     
 
     dadosSite = None
@@ -84,93 +212,27 @@ def obterDadosABNT(soup, urlSite):
             if not dadosSite:
                 raise ValueError("Nenhum JSON-LD compatível encontrado.")
             
-            autorDados = dadosSite.get('author', {})
-            
-            
-            if autorDados:
-              if isinstance(autorDados, list):
-                for autorIndividual in autorDados:
-                  
-                  nomeCompleto = autorIndividual.get('name')
-
-                  if autorIndividual.get('@type') == 'Organization' or tipo_autor == 'Organization':
-                      tipo_autor = 'Organization'
-
-                      nomeCompleto = nomeCompleto.upper()
-
-                      autor.append({'instituicao' : nomeCompleto})
-                      continue
-
-                
-                
-                  
-                  autorPartesNome = nomeCompleto.strip().split()
-                  autorSobrenome = autorPartesNome[-1].upper()
-                  autorNomeResto = " ".join(autorPartesNome[:-1])
-
-
-                  autor.append({
-                      'family' : autorSobrenome,
-                      'given' : autorNomeResto
-                  })
-              if isinstance(autorDados, dict):
-                nomeCompleto = autorDados.get('name')
-                tipo_autor = autorDados.get('@type')
-
-                if tipo_autor == 'Organization':
-                    nomeCompleto = nomeCompleto.upper()
-                    autor = {
-                        'literal' : nomeCompleto
-                    }
-                else:
-                    autorPartesNome = nomeCompleto.strip().split()
-                    autorSobrenome = autorPartesNome[-1].upper()
-                    autorNomeResto = " ".join(autorPartesNome[:-1])
-
-                    autor.append({
-                        'family' : autorSobrenome,
-                        'given' : autorNomeResto
-                    })
-
-            
-            dataPublicacao = dadosSite.get('datePublished')
-            if dataPublicacao:
-                try:
-                    if isinstance(dataPublicacao, (int, float)):
-                        anoPublicacao = int(dataPublicacao)
-                    elif isinstance(dataPublicacao, str):
-                        verificacao = re.search(r'\d{4}', dataPublicacao)
-                        if verificacao:
-                            anoPublicacao = int(verificacao.group(0))
-                        else:
-                            anoPublicacao = datetime.fromisoformat(dataPublicacao).year
-                except Exception:
-                    anoPublicacao = None
-                
-            
-            
-            
-
 
         except Exception as e:
             dadosSite = None
 
-        tituloCompleto = obterTituloABNT(dadosSite)
-        nomeSite = obterNomeSiteABNT(soup, dadosSite)
+    tituloCompleto = obterTituloABNT(dadosSite)
+    nomeSite = obterNomeSiteABNT(soup, dadosSite)
+    anoPublicacao = obterAnoPublicacao(dadosSite, soup)
+    autor = obterAutorABNT(soup, dadosSite)
         
-    dataAcessoPura = date.today()
+    dataAcessoInfo = date.today()
 
     meses = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.']
-    dataAcesso = f"{dataAcessoPura.day} {meses[dataAcessoPura.month - 1]} {dataAcessoPura.year}"
+    dataAcesso = f"{dataAcessoInfo.day} {meses[dataAcessoInfo.month - 1]} {dataAcessoInfo.year}"
         
         
     
     if anoPublicacao == None:
         return {
             "author" : autor,
-            ##"tipoAutor" : tipo_autor, 
             "title" : tituloCompleto, 
-            "accessed" : {"date-parts": [[dataAcessoPura.year, dataAcessoPura.month, dataAcessoPura.day]]}, 
+            "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
             "URL" : urlSite,
             "container-title" : nomeSite,
             "type" : "webpage",
@@ -178,11 +240,10 @@ def obterDadosABNT(soup, urlSite):
         }
     else:
         return {
-            "author" : autor,
-            ##"tipoAutor" : tipo_autor, 
+            "author" : autor, 
             "title" : tituloCompleto, 
             "issued" : {"date-parts" : [[anoPublicacao]]}, 
-            "accessed" : {"date-parts": [[dataAcessoPura.year, dataAcessoPura.month, dataAcessoPura.day]]}, 
+            "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
             "URL" : urlSite,
             "container-title" : nomeSite,
             "type" : "webpage",
@@ -201,47 +262,50 @@ bibliografia = None #Será preenchido por citacaoInLine()
 def citacaoInLine(soup, url):
     dadosABNT = obterDadosABNT(soup, url)
 
-    id = dadosABNT.get('id')
+    try:
 
-    dadosBibliograficos = [dadosABNT]
+        id = dadosABNT.get('id')
 
-    global bibliografia
+        dadosBibliograficos = [dadosABNT]
 
-    bibliografia = inicializar_citeproc(dadosBibliograficos, 'ibict-abnt.csl')
+        global bibliografia
 
-    print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
+        bibliografia = inicializar_citeproc(dadosBibliograficos, 'ibict-abnt.csl')
 
+        #print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
 
+        
+        citacao = Citation([CitationItem(id)])
+        bibliografia.register(citacao)
 
-    
-    citacao = Citation([CitationItem(id)])
-    bibliografia.register(citacao)
+        return bibliografia.cite(citacao, lambda x: None)
+    except:
 
-    return bibliografia.cite(citacao, lambda x: None)
+        pedacosCitacaoInLine = []
 
-    pedacosCitacaoInLine = []
+        pedacosCitacaoInLine.append('(')
 
-    pedacosCitacaoInLine.append('(')
-
-    anoPublicacao = dadosABNT.get('anoPublicacao')
-    autor = dadosABNT.get('autor')
-    
-    if isinstance(autor, list):
-        if len(autor) > 3:
-            texto = f"{autor[0].get('sobrenome')} et al., "
-            pedacosCitacaoInLine.append(texto)
-        else:
-            for i in range(2):
-                texto = f"{autor[i].get('sobrenome')}, "
+        anoPublicacao = dadosABNT.get('anoPublicacao')
+        autor = dadosABNT.get('autor')
+        
+        if isinstance(autor, list):
+            if len(autor) > 3:
+                texto = f"{autor[0].get('sobrenome')} et al., "
                 pedacosCitacaoInLine.append(texto)
+            else:
+                for i in range(2):
+                    texto = f"{autor[i].get('sobrenome')}, "
+                    pedacosCitacaoInLine.append(texto)
 
-    else:
-        sobrenome = autor.get('sobrenome')
-        pedacosCitacaoInLine.append(f"{autor.get('sobrenome')}, ")
+        else:
+            sobrenome = autor.get('sobrenome')
+            pedacosCitacaoInLine.append(f"{autor.get('sobrenome')}, ")
 
-    pedacosCitacaoInLine.append(f"{anoPublicacao})")
+        pedacosCitacaoInLine.append(f"{anoPublicacao})")
 
-    citacaoInLine = "".join(pedacosCitacaoInLine)
+        citacaoInLine = "".join(pedacosCitacaoInLine)
+
+        return citacaoInLine
 
 
     
@@ -267,8 +331,6 @@ def citacaoRef(soup, url):
     
     
 
-    pedacosCitacaoRef = []
-
     if (dadosABNT.get('autor') or dadosABNT.get('tituloCompleto') == None):
         if soup.find('div', class_='citacao-txt'):
             citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
@@ -276,6 +338,9 @@ def citacaoRef(soup, url):
         elif soup.find('p', class_='citation'):
             citacao_abnt = (soup.find('p', class_='citation')).get_text().strip()
 
+    if citacao_abnt:
+        return citacao_abnt
+    
     return "Nenhuma referência encontrada."
     
 
