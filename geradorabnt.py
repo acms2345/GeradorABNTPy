@@ -29,8 +29,9 @@ def carregarJSONLD(jsonldsPuros):
 
 
 def obterTituloABNT(soup, dadosJSONSite):
-    if dadosJSONSite.get('headline'):
-        return dadosJSONSite.get('headline')
+    if dadosJSONSite:
+        if dadosJSONSite.get('headline'):
+            return dadosJSONSite.get('headline')
     elif soup.find('h1'):
         return soup.find('h1')
     else:
@@ -157,22 +158,31 @@ def obterNomeSiteABNT(soup, dadosJSONSite):
         return nome_site
     
 def obterAnoPublicacao(dadosJSONSite, soup):
-    dataPublicacao = dadosJSONSite.get('datePublished')
-    if dataPublicacao:
-        if isinstance(dataPublicacao, (int, float)):
-            return int(dataPublicacao)
-        elif isinstance(dataPublicacao, str):
-            verificacao = re.search(r'\d{4}', dataPublicacao)
-            if verificacao:
-                return int(verificacao.group(0))
-            else:
-                return datetime.fromisoformat(dataPublicacao).year
+    if dadosJSONSite:
+        dataPublicacao = dadosJSONSite.get('datePublished')
+        if dataPublicacao:
+            if isinstance(dataPublicacao, (int, float)):
+                return int(dataPublicacao)
+            elif isinstance(dataPublicacao, str):
+                verificacao = re.search(r'\d{4}', dataPublicacao)
+                if verificacao:
+                    return int(verificacao.group(0))
+                else:
+                    return datetime.fromisoformat(dataPublicacao).year
     else:
         meta_site = soup.find("meta", property="article:published_time")
 
         if meta_site:
             anoPublicacao = meta_site.get("content")
-            return anoPublicacao
+            if isinstance(anoPublicacao, (int, float)):
+                return int(anoPublicacao)  
+            elif isinstance(anoPublicacao, str):
+                verificacao = re.search(r'\d{4}', anoPublicacao)
+                if verificacao:
+                    return int(verificacao.group(0))
+                else:
+                    return datetime.fromisoformat(anoPublicacao).year  
+            
         else: 
             return None
 
@@ -216,7 +226,7 @@ def obterDadosABNT(soup, urlSite):
         except Exception as e:
             dadosSite = None
 
-    tituloCompleto = obterTituloABNT(dadosSite)
+    tituloCompleto = obterTituloABNT(soup, dadosSite)
     nomeSite = obterNomeSiteABNT(soup, dadosSite)
     anoPublicacao = obterAnoPublicacao(dadosSite, soup)
     autor = obterAutorABNT(soup, dadosSite)
@@ -285,21 +295,21 @@ def citacaoInLine(soup, url):
 
         pedacosCitacaoInLine.append('(')
 
-        anoPublicacao = dadosABNT.get('anoPublicacao')
-        autor = dadosABNT.get('autor')
+        anoPublicacao = dadosABNT.get('issued')
+        autor = dadosABNT.get('author')
         
         if isinstance(autor, list):
             if len(autor) > 3:
-                texto = f"{autor[0].get('sobrenome')} et al., "
+                texto = f"{autor[0].get('family')} et al., "
                 pedacosCitacaoInLine.append(texto)
             else:
                 for i in range(2):
-                    texto = f"{autor[i].get('sobrenome')}, "
+                    texto = f"{autor[i].get('family')}, "
                     pedacosCitacaoInLine.append(texto)
 
         else:
-            sobrenome = autor.get('sobrenome')
-            pedacosCitacaoInLine.append(f"{autor.get('sobrenome')}, ")
+            sobrenome = autor.get('family')
+            pedacosCitacaoInLine.append(f"{autor.get('family')}, ")
 
         pedacosCitacaoInLine.append(f"{anoPublicacao})")
 
@@ -331,7 +341,7 @@ def citacaoRef(soup, url):
     
     
 
-    if (dadosABNT.get('autor') or dadosABNT.get('tituloCompleto') == None):
+    if (dadosABNT.get('author') or dadosABNT.get('title') == None):
         if soup.find('div', class_='citacao-txt'):
             citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
 
