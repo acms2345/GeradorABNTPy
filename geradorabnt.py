@@ -32,13 +32,20 @@ def obterTituloABNT(soup, dadosJSONSite):
     if dadosJSONSite:
         if dadosJSONSite.get('headline'):
             return dadosJSONSite.get('headline')
-    elif soup.find('h1'):
-        return soup.find('h1')
-    else:
-        return soup.title
+    if soup.find('h1'):
+        return (soup.find('h1')).get_text()
+    
+    #Se tudo falhar...
+    return (soup.title).get_text()
 
 def obterAutorABNT(soup, dadosSite):
+    """Essa função deve retornar o que o ibict-abnt.csl espera:
+    
+    - Para autores: family: sobrenome e given : restanteDoNome
+    - Para organizações: literal: nome """
     autor = []
+
+    tipo_autor = None
     
     if dadosSite:
     
@@ -50,12 +57,15 @@ def obterAutorABNT(soup, dadosSite):
                     
                     nomeCompleto = autorIndividual.get('name')
 
-                    if autorIndividual.get('@type') == 'Organization' or tipo_autor == 'Organization':
+                    if not nomeCompleto:
+                        continue
+
+                    if autorIndividual.get('@type') == 'Organization':
                         tipo_autor = 'Organization'
 
                         nomeCompleto = nomeCompleto.upper()
 
-                        autor.append({'instituicao' : nomeCompleto})
+                        autor.append({'literal' : nomeCompleto})
                         continue
 
                 
@@ -76,9 +86,9 @@ def obterAutorABNT(soup, dadosSite):
 
                 if tipo_autor == 'Organization':
                     nomeCompleto = nomeCompleto.upper()
-                    autor = {
+                    autor.append({
                         'literal' : nomeCompleto
-                    }
+                    })
                 else:
                     autorPartesNome = nomeCompleto.strip().split()
                     autorSobrenome = autorPartesNome[-1].upper()
@@ -88,7 +98,7 @@ def obterAutorABNT(soup, dadosSite):
                         'family' : autorSobrenome,
                         'given' : autorNomeResto
                     })
-    else:
+    if autor == []:
         metatagValido = False
 
         seletores_meta = [
@@ -100,11 +110,16 @@ def obterAutorABNT(soup, dadosSite):
             if metadadosAutor and metadadosAutor.get('content'):
                 nomeAutorTeste = metadadosAutor.get('content')
                 if seletor == {'property': 'article:author'}:
-                    padraoUrls = r"http*"
-                    if re.search(nomeAutorTeste, padraoUrls):
-                        pass
-                nomeAutorTesteLimpo = nomeAutorTeste.strip().lower()
-                nomeAutorTesteLimpo = ''.join(c for c in unicodedata.normalize('NFD', nomeAutorTesteLimpo)
+                    if nomeAutorTeste.startswith(('http://', 'https://')):
+                        continue
+                # Se tem vírgula, pega só a primeira parte
+                padrao_limpeza = r",\s*(do jornal|da redação|correspondente|colunista|enviado|especial|o|a)\b.*"
+    
+                # Substitui o padrão por nada e limpa espaços extras nas pontas
+                nomeAutorTesteLimpo = re.sub(padrao_limpeza, "", nomeAutorTeste, flags=re.IGNORECASE).strip()
+
+                nomeAutorTesteVerif = nomeAutorTesteLimpo.lower()
+                nomeAutorTesteVerif = ''.join(c for c in unicodedata.normalize('NFD', nomeAutorTesteVerif)
                     if unicodedata.category(c) != 'Mn')
                 
                 blacklist_exata = {
@@ -115,10 +130,10 @@ def obterAutorABNT(soup, dadosSite):
                     'membro', 'member', 'site', 'website', 'homepage', 'web'
                 }
 
-                if nomeAutorTesteLimpo in blacklist_exata: pass
+                if nomeAutorTesteVerif in blacklist_exata: continue
 
-                if len(nomeAutorTesteLimpo) < 3 or not any(c.isalpha() for c in nomeAutorTesteLimpo):
-                    pass
+                if len(nomeAutorTesteVerif) < 3 or not any(c.isalpha() for c in nomeAutorTesteVerif):
+                    continue
                 termos_parciais = [
                     r'\bequipe\b', r'\bsuporte\b', r'\batendimento\b', r'\bredacao\b', 
                     r'\breporter\b', r'\breportagem\b', r'\bjornalismo\b', r'\bcomunicacao\b', 
@@ -128,10 +143,11 @@ def obterAutorABNT(soup, dadosSite):
                 # Compila os termos em uma única expressão regular separada por "OU" (|)
                 regex_parcial = re.compile('|'.join(termos_parciais))
                 
-                if regex_parcial.search(nomeAutorTesteLimpo):
-                    pass
+                if regex_parcial.search(nomeAutorTesteVerif):
+                    continue
                 
-                autorPartesNome = nomeAutorTeste.strip().split()
+                
+                autorPartesNome = nomeAutorTesteLimpo.split()
                 autorSobrenome = autorPartesNome[-1].upper()
                 autorNomeResto = " ".join(autorPartesNome[:-1])
 
@@ -167,24 +183,30 @@ def obterAnoPublicacao(dadosJSONSite, soup):
                 verificacao = re.search(r'\d{4}', dataPublicacao)
                 if verificacao:
                     return int(verificacao.group(0))
-                else:
+                try:
                     return datetime.fromisoformat(dataPublicacao).year
-    else:
-        meta_site = soup.find("meta", property="article:published_time")
+                except:
+                    pass
 
-        if meta_site:
-            anoPublicacao = meta_site.get("content")
-            if isinstance(anoPublicacao, (int, float)):
-                return int(anoPublicacao)  
-            elif isinstance(anoPublicacao, str):
-                verificacao = re.search(r'\d{4}', anoPublicacao)
-                if verificacao:
-                    return int(verificacao.group(0))
-                else:
-                    return datetime.fromisoformat(anoPublicacao).year  
-            
-        else: 
-            return None
+    #Se a verificação do JSON-LD falhar... Observa-se os metadados.
+    meta_site = soup.find("meta", property="article:published_time")
+
+    if meta_site:
+        anoPublicacao = meta_site.get("content")
+        if isinstance(anoPublicacao, (int, float)):
+            return int(anoPublicacao)  
+        elif isinstance(anoPublicacao, str):
+            verificacao = re.search(r'\d{4}', anoPublicacao)
+            if verificacao:
+                return int(verificacao.group(0))
+            else:
+                try:
+                    return datetime.fromisoformat(anoPublicacao).year
+                except:
+                    pass  
+        
+    #Se tudo falhar...
+    return None
 
 
 def obterDadosABNT(soup, urlSite):
@@ -214,17 +236,21 @@ def obterDadosABNT(soup, urlSite):
     JSONLD = soup.find_all('script', type='application/ld+json')
 
     if JSONLD:
-        try:
-            for dadosSiteTeste in carregarJSONLD(JSONLD):
-                if(dadosSiteTeste.get('@type') in {'Article', 'NewsArticle', 'BlogPosting'} ): 
+        for dadosSiteTeste in carregarJSONLD(JSONLD):
+            try:
+                if dadosSiteTeste.get('author', {}) or dadosSiteTeste.get('headline'): 
                     dadosSite = dadosSiteTeste
                     break
-            if not dadosSite:
-                raise ValueError("Nenhum JSON-LD compatível encontrado.")
-            
+                
 
-        except Exception as e:
-            dadosSite = None
+            except AttributeError:
+                
+                if isinstance(dadosSiteTeste, list):
+                    for dadosTesteIndividual in dadosSiteTeste:
+                        if dadosTesteIndividual.get('author') or dadosTesteIndividual.get('headline'):
+                            dadosSite = dadosTesteIndividual
+                            break
+            
 
     tituloCompleto = obterTituloABNT(soup, dadosSite)
     nomeSite = obterNomeSiteABNT(soup, dadosSite)
@@ -289,9 +315,10 @@ def citacaoInLine(soup, url):
         bibliografia.register(citacao)
 
         return bibliografia.cite(citacao, lambda x: None)
-    except:
+    except Exception as excecao:
+        return f"Erro ao construir a citação In Line: {excecao}"
 
-        pedacosCitacaoInLine = []
+        """pedacosCitacaoInLine = []
 
         pedacosCitacaoInLine.append('(')
 
@@ -315,7 +342,7 @@ def citacaoInLine(soup, url):
 
         citacaoInLine = "".join(pedacosCitacaoInLine)
 
-        return citacaoInLine
+        return citacaoInLine"""
 
 
     
@@ -329,19 +356,23 @@ def citacaoInLine(soup, url):
 def citacaoRef(soup, url):
     dadosABNT = obterDadosABNT(soup, url)
 
-    if bibliografia is None:
-        return "Erro: Você precisa chamar citacaoInLine antes de gerar a referência."
+    try:
+
+        if bibliografia is None:
+            return "Erro: Você precisa chamar citacaoInLine antes de gerar a referência."
+        
+
+        referencias = list(bibliografia.bibliography())
+        
+        if referencias:
+            # Pega o primeiro item [0] e converte em texto puro
+            return str(referencias[0])
+    except Exception as excecao:
+        return f"Erro ao criar a referência bibliográfica: {excecao}"
+    
     
 
-    referencias = list(bibliografia.bibliography())
-    
-    if referencias:
-        # Pega o primeiro item [0] e converte em texto puro
-        return str(referencias[0])
-    
-    
-
-    if (dadosABNT.get('author') or dadosABNT.get('title') == None):
+    """if (dadosABNT.get('author') or dadosABNT.get('title') == None):
         if soup.find('div', class_='citacao-txt'):
             citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
 
@@ -349,7 +380,7 @@ def citacaoRef(soup, url):
             citacao_abnt = (soup.find('p', class_='citation')).get_text().strip()
 
     if citacao_abnt:
-        return citacao_abnt
+        return citacao_abnt"""
     
     return "Nenhuma referência encontrada."
     
