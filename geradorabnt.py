@@ -257,11 +257,7 @@ def obterDadosABNT(soup, urlSite):
     anoPublicacao = obterAnoPublicacao(dadosSite, soup)
     autor = obterAutorABNT(soup, dadosSite)
         
-    dataAcessoInfo = date.today()
-
-    meses = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.']
-    dataAcesso = f"{dataAcessoInfo.day} {meses[dataAcessoInfo.month - 1]} {dataAcessoInfo.year}"
-        
+    dataAcessoInfo = date.today()        
         
     
     if anoPublicacao == None:
@@ -285,17 +281,20 @@ def obterDadosABNT(soup, urlSite):
             "type" : "webpage",
             "id" : urlSite
         }
-    
-def inicializar_citeproc(dados_json, caminho_csl):
+
+bibliografiasPorPasta = {}  
+
+def criarBibliografia(dados_json, idBibliografia):
     """Inicializa a fonte de dados e o motor do CSL."""
     fonte = CiteProcJSON(dados_json)
-    estilo = CitationStylesStyle(caminho_csl, locale='pt-BR', validate=False)
+    estilo = CitationStylesStyle('ibict-abnt.csl', locale='pt-BR', validate=False)
     # Usamos plain para texto puro ou html para manter itálicos/negritos
-    return CitationStylesBibliography(estilo, fonte, formatter.plain)
+    bibliografia = CitationStylesBibliography(estilo, fonte, formatter.plain)
+    bibliografiasPorPasta[idBibliografia] = bibliografia
+    return bibliografia
 
-bibliografia = None #Será preenchido por citacaoInLine()
 
-def citacaoInLine(soup, url):
+def citacaoInLine(soup, url, pasta):
     dadosABNT = obterDadosABNT(soup, url)
 
     try:
@@ -304,9 +303,10 @@ def citacaoInLine(soup, url):
 
         dadosBibliograficos = [dadosABNT]
 
-        global bibliografia
-
-        bibliografia = inicializar_citeproc(dadosBibliograficos, 'ibict-abnt.csl')
+        try:
+            bibliografia = bibliografiasPorPasta[pasta]
+        except KeyError:
+            bibliografia = criarBibliografia(dadosBibliograficos, pasta)
 
         #print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
 
@@ -353,23 +353,26 @@ def citacaoInLine(soup, url):
     
     
 
-def citacaoRef(soup, url):
-    dadosABNT = obterDadosABNT(soup, url)
-
+def citacaoRef(pasta, url):
     try:
-
+        bibliografia = bibliografiasPorPasta[pasta]
         if bibliografia is None:
             return "Erro: Você precisa chamar citacaoInLine antes de gerar a referência."
         
 
-        referencias = list(bibliografia.bibliography())
+        # 1. Encontra a posição (índice) que a chave ocupa dentro daquela bibliografia
+        # O citeproc armazena a ordem em 'keys' dentro do objeto do estilo
+        indice_no_estilo = bibliografia.keys.index(url)
         
-        if referencias:
-            # Pega o primeiro item [0] e converte em texto puro
-            return str(referencias[0])
+        
+        if indice_no_estilo is not None:
+            # 2. Renderiza a lista da bibliografia e extrai exatamente o item daquele índice
+            lista_formatada = bibliografia.bibliography()
+            
+            return str(lista_formatada[indice_no_estilo])
+
     except Exception as excecao:
         return f"Erro ao criar a referência bibliográfica: {excecao}"
-    
     
 
     """if (dadosABNT.get('author') or dadosABNT.get('title') == None):

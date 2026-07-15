@@ -1,4 +1,4 @@
-import geradorabnt
+from geradorabnt import citacaoInLine, citacaoRef
 import requests
 from bs4 import BeautifulSoup
 
@@ -20,8 +20,12 @@ while True:
     if doc.status_code == 200:
         soup = BeautifulSoup(doc.content, 'html.parser')
 
-        print(geradorabnt.citacaoInLine(soup, url))
-        print(geradorabnt.citacaoRef(soup, url))
+        pastaEscolha = input("Em qual pasta irás salvar?: ")
+
+
+
+        print(citacaoInLine(soup, url, pastaEscolha))
+        print(citacaoRef(pastaEscolha, url))
     else:
         print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
 
