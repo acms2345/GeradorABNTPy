@@ -1,5 +1,7 @@
 from geradorabnt import citacaoInLine, citacaoRef
 import requests
+import re
+import unicodedata
 from bs4 import BeautifulSoup
 
 
@@ -22,10 +24,19 @@ while True:
 
         pastaEscolha = input("Em qual pasta irás salvar?: ")
 
+        pasta = unicodedata.normalize('NFKD', pastaEscolha).encode('ASCII', 'ignore').decode('ASCII')
+
+        pasta.replace(" ", "_")
+
+        pasta = re.sub(r'[\\/*?:"<>|]', "", pasta)
+
+        nome_limpo = re.sub(r'[^a-zA-Z0-9_-]', '', pasta)
 
 
-        print(citacaoInLine(soup, url, pastaEscolha))
-        print(citacaoRef(pastaEscolha, url))
+
+
+        print(citacaoInLine(soup, url, pasta))
+        print(citacaoRef(pasta, url))
     else:
         print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
 

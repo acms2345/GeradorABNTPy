@@ -1,4 +1,5 @@
 import requests
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
 import json
@@ -38,7 +39,7 @@ def obterTituloABNT(soup, dadosJSONSite):
     #Se tudo falhar...
     return (soup.title).get_text()
 
-def obterAutorABNT(soup, dadosSite):
+def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
     """Essa função deve retornar o que o ibict-abnt.csl espera:
     
     - Para autores: family: sobrenome e given : restanteDoNome
@@ -46,7 +47,28 @@ def obterAutorABNT(soup, dadosSite):
     autor = []
 
     tipo_autor = None
-    
+
+    if nomeSite is not None:
+        #A seguir: verificação de sites institucionais
+        tlds_institucionais = [
+            ".gov.br",
+            ".gov",
+            ".edu.br",
+            ".edu",
+            ".org.br",
+            ".org",
+            ".jus.br",
+            ".leg.br",
+        ]
+        dominioURL = urlparse(url=urlSite).netloc.lower()
+
+        if any(dominioURL.endswith(tld) for tld in tlds_institucionais):
+            autor.append({'literal' : nomeSite})
+
+            return autor
+
+
+        
     if dadosSite:
     
         autorDados = dadosSite.get('author', {})
@@ -81,25 +103,30 @@ def obterAutorABNT(soup, dadosSite):
                         'given' : autorNomeResto
                     })
             if isinstance(autorDados, dict):
-                nomeCompleto = autorDados.get('name')
                 tipo_autor = autorDados.get('@type')
+                
+                nomeCompleto = autorDados.get('name')
 
-                if tipo_autor == 'Organization':
-                    nomeCompleto = nomeCompleto.upper()
-                    autor.append({
-                        'literal' : nomeCompleto
-                    })
-                else:
-                    autorPartesNome = nomeCompleto.strip().split()
-                    autorSobrenome = autorPartesNome[-1].upper()
-                    autorNomeResto = " ".join(autorPartesNome[:-1])
+                if nomeCompleto:
+                    
 
-                    autor.append({
-                        'family' : autorSobrenome,
-                        'given' : autorNomeResto
-                    })
+                    if tipo_autor == 'Organization':
+                        nomeCompleto = nomeCompleto.upper()
+                        autor.append({
+                            'literal' : nomeCompleto
+                        })
+                    else:
+                        autorPartesNome = nomeCompleto.strip().split()
+                        autorSobrenome = autorPartesNome[-1].upper()
+                        autorNomeResto = " ".join(autorPartesNome[:-1])
+
+                        autor.append({
+                            'family' : autorSobrenome,
+                            'given' : autorNomeResto
+                        })
+    
+    #Se, mesmo após a verificação do JSON-LD acima, os dados ainda não foram preenchidos...
     if autor == []:
-        metatagValido = False
 
         seletores_meta = [
         {'name': 'author'},
@@ -211,10 +238,21 @@ def obterAnoPublicacao(dadosJSONSite, soup):
 
 def obterDadosABNT(soup, urlSite):
     """
-    São coletadas as seguintes informações:
-    autor, tipo_autor, tituloCompleto, data_publicacao, data_acesso e url.
+    A presente função coleta os dados necessários para criar a
+    citação, conforme o solicitado no CSL.
+
+    Os dados obtidos são:
+
+    'author' : autor,
+    'title' : tituloCompleto, 
+    'accessed' : {a data de acesso - informações no modelo ano-mês-dia}, 
+    'URL' : urlSite,
+    'container-title' : nomeSite,
+    'type' : "webpage",
+    'id' : urlSite
     
-    Esses são retornados em um dicionário
+    Esses são retornados em um dicionário 
+    (para compatibilidade com o citeproc e o CSL).
 
     Primeiro, é feita a análise para saber se o site possui um JSON-LD, 
     arquivo de indexação que pode servir como base de obtenção.
@@ -225,7 +263,6 @@ def obterDadosABNT(soup, urlSite):
 
     #Essa é a estrutura a ser seguida
     autor = []
-    tipo_autor = None
     tituloCompleto= None
     nomeSite = None
     anoPublicacao = None
@@ -251,11 +288,13 @@ def obterDadosABNT(soup, urlSite):
                             dadosSite = dadosTesteIndividual
                             break
             
+            if dadosSite is not None: break
+            
 
     tituloCompleto = obterTituloABNT(soup, dadosSite)
     nomeSite = obterNomeSiteABNT(soup, dadosSite)
     anoPublicacao = obterAnoPublicacao(dadosSite, soup)
-    autor = obterAutorABNT(soup, dadosSite)
+    autor = obterAutorABNT(soup, dadosSite, nomeSite, urlSite)
         
     dataAcessoInfo = date.today()        
         
@@ -268,7 +307,7 @@ def obterDadosABNT(soup, urlSite):
             "URL" : urlSite,
             "container-title" : nomeSite,
             "type" : "webpage",
-            "id" : urlSite
+            "id" : urlSite.lower()
         }
     else:
         return {
@@ -279,10 +318,11 @@ def obterDadosABNT(soup, urlSite):
             "URL" : urlSite,
             "container-title" : nomeSite,
             "type" : "webpage",
-            "id" : urlSite
+            "id" : urlSite.lower()
         }
 
-bibliografiasPorPasta = {}  
+bibliografiasPorPasta = {} 
+dadosPorPasta = {} 
 
 def criarBibliografia(dados_json, idBibliografia):
     """Inicializa a fonte de dados e o motor do CSL."""
@@ -301,7 +341,28 @@ def citacaoInLine(soup, url, pasta):
 
         id = dadosABNT.get('id')
 
+        citacao = Citation([CitationItem(id)])
         dadosBibliograficos = [dadosABNT]
+
+        if pasta in dadosPorPasta:
+            if dadosABNT in dadosPorPasta[pasta]:
+                bibliografia = bibliografiasPorPasta[pasta]
+            else:            
+                dadosPorPasta[pasta].append(dadosABNT)
+
+                dadosBibliograficos = dadosPorPasta[pasta]
+                bibliografia = criarBibliografia(dadosBibliograficos, pasta)
+                
+
+
+        else:
+            dadosPorPasta[pasta] = [dadosABNT]  # Cria a lista com o primeiro item
+            bibliografia = criarBibliografia(dadosBibliograficos, pasta)
+
+            
+            bibliografia.register(citacao)
+
+        
 
         try:
             bibliografia = bibliografiasPorPasta[pasta]
@@ -362,7 +423,9 @@ def citacaoRef(pasta, url):
 
         # 1. Encontra a posição (índice) que a chave ocupa dentro daquela bibliografia
         # O citeproc armazena a ordem em 'keys' dentro do objeto do estilo
-        indice_no_estilo = bibliografia.keys.index(url)
+        indice_no_estilo = bibliografia.keys.index(url.lower())
+        #Obs.: foi descoberto em testes que o 'bibliografia.keys' só guarda as
+        #coisas em minúsculo. Por isso, há o 'url.lower()'.
         
         
         if indice_no_estilo is not None:
