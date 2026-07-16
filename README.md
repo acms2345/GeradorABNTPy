@@ -1,5 +1,6 @@
 # GeradorABNTPy
 ![Estatísticas de tempo do Hackatime](https://hackatime.hackclub.com/api/v1/badge/acms2345/acms2345/GeradorABNTPy)
+
 Um sistema para verificação de site e obtenção da citação ABNT dele. 
 
 Esse sistema está sendo feito com base na NBR 6023 (3ª edição).
