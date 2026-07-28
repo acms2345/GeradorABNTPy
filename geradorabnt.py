@@ -6,9 +6,6 @@ import json
 from datetime import date, datetime
 import re
 
-import colorama
-
-
 from citeproc import CitationStylesStyle, CitationStylesBibliography
 from citeproc import formatter
 from citeproc import Citation, CitationItem

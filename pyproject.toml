@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "geradorabntpy"
+version = "0.1.0"
+description = "Gerador de referências ABNT a partir de URLs"
+requires-python = ">=3.9"
+readme = "README.md"
+dependencies = [
+    "lxml>=5.0", 
+    "requests>=2.31",
+    "citeproc-py>=0.6",
+    "beautifulsoup4>=4.12",
+]
