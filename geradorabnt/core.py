@@ -450,5 +450,9 @@ def citacaoRef(pasta, url):
         return citacao_abnt"""
     
     return "Nenhuma referência encontrada."
+
+def limparPasta(pasta):
+    dadosPorPasta.pop(pasta, None)
+    bibliografiasPorPasta.pop(pasta, None)
     
 
