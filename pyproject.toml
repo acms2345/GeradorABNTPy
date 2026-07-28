@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["geradorabnt"]
+packages = ["geradorabnt"]
 
 [tool.setuptools.package-data]
 "*" = ["*.csl"]
