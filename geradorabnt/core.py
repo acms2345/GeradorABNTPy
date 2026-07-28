@@ -11,6 +11,10 @@ from citeproc import formatter
 from citeproc import Citation, CitationItem
 from citeproc.source.json import CiteProcJSON
 
+from importlib.resources import files
+
+CAMINHO_CSL = files("geradorabnt").joinpath("ibict-abnt.csl")
+
 import unicodedata
 
 def carregarJSONLD(jsonldsPuros):
@@ -324,7 +328,7 @@ dadosPorPasta = {}
 def criarBibliografia(dados_json, idBibliografia):
     """Inicializa a fonte de dados e o motor do CSL."""
     fonte = CiteProcJSON(dados_json)
-    estilo = CitationStylesStyle('ibict-abnt.csl', locale='pt-BR', validate=False)
+    estilo = CitationStylesStyle(CAMINHO_CSL, locale='pt-BR', validate=False)
     # Usamos plain para texto puro ou html para manter itálicos/negritos
     bibliografia = CitationStylesBibliography(estilo, fonte, formatter.plain)
     bibliografiasPorPasta[idBibliografia] = bibliografia

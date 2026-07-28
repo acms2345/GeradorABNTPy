@@ -1,4 +1,4 @@
-from geradorabnt import citacaoInLine, citacaoRef
+from geradorabnt.core import citacaoInLine, citacaoRef
 import requests
 import re
 import unicodedata
