@@ -16,29 +16,35 @@ while True:
         "User-Agent": "Mozilla/5.0"
     }
 
+    try:
+        doc = requests.get(url)
 
-    doc = requests.get(url)
+        if doc.status_code == 200:
+            soup = BeautifulSoup(doc.content, 'html.parser')
 
-    if doc.status_code == 200:
-        soup = BeautifulSoup(doc.content, 'html.parser')
+            pastaEscolha = input("Em qual pasta irás salvar?: ")
 
-        pastaEscolha = input("Em qual pasta irás salvar?: ")
+            pasta = unicodedata.normalize('NFKD', pastaEscolha).encode('ASCII', 'ignore').decode('ASCII')
 
-        pasta = unicodedata.normalize('NFKD', pastaEscolha).encode('ASCII', 'ignore').decode('ASCII')
+            pasta.replace(" ", "_")
 
-        pasta.replace(" ", "_")
+            pasta = re.sub(r'[\\/*?:"<>|]', "", pasta)
 
-        pasta = re.sub(r'[\\/*?:"<>|]', "", pasta)
-
-        nome_limpo = re.sub(r'[^a-zA-Z0-9_-]', '', pasta)
-
-
+            nome_limpo = re.sub(r'[^a-zA-Z0-9_-]', '', pasta)
 
 
-        print(citacaoInLine(soup, url, pasta))
-        print(citacaoRef(pasta, url))
-    else:
-        print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
+
+
+            print(citacaoInLine(soup, url, pasta))
+            print(citacaoRef(pasta, url))
+        else:
+            print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
+    except (TypeError, AttributeError, KeyError) as excecao:
+        print(f"Erro ao criar a citação: {str(excecao)}")
+    except requests.exceptions.RequestException as excecao:
+        print(f"Erro ao acessar o site: {str(excecao)}")
+    except Exception as excecao:
+        print(f"Erro genérico no sistema: {str(excecao)}")
 
 
 

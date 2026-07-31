@@ -378,7 +378,7 @@ def citacaoInLine(soup, url, pasta):
 
         return bibliografia.cite(citacao, lambda x: None)
     except Exception as excecao:
-        return f"Erro ao construir a citação In Line: {excecao}"
+        raise excecao
 
         """pedacosCitacaoInLine = []
 
@@ -436,7 +436,7 @@ def citacaoRef(pasta, url):
             return str(lista_formatada[indice_no_estilo])
 
     except Exception as excecao:
-        return f"Erro ao criar a referência bibliográfica: {excecao}"
+        raise excecao
     
 
     """if (dadosABNT.get('author') or dadosABNT.get('title') == None):
