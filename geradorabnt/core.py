@@ -325,17 +325,23 @@ def obterDadosABNT(soup, urlSite):
 bibliografiasPorPasta = {} 
 dadosPorPasta = {} 
 
-def criarBibliografia(dados_json, idBibliografia):
-    """Inicializa a fonte de dados e o motor do CSL."""
+def criarBibliografia(dados_json, idBibliografia, formatador=formatter.plain):
+    """Inicializa a fonte de dados e o motor do CSL.
+    Ela recebe os dados JSON (obtidos em `obterDadosABNT()`), o ID de acesso à
+    pasta da bibliografia em específico, e formatador (com o padrão sendo o `formatter.plain`,
+    mas também aceita `formatter.html` e `formatter.rst`)."""
+
+
     fonte = CiteProcJSON(dados_json)
     estilo = CitationStylesStyle(CAMINHO_CSL, locale='pt-BR', validate=False)
-    # Usamos plain para texto puro ou html para manter itálicos/negritos
-    bibliografia = CitationStylesBibliography(estilo, fonte, formatter.plain)
+    
+    bibliografia = CitationStylesBibliography(estilo, fonte, formatador)
     bibliografiasPorPasta[idBibliografia] = bibliografia
+
     return bibliografia
 
 
-def citacaoInLine(soup, url, pasta):
+def citacaoInLine(soup, url, pasta, formatador=formatter.plain):
     dadosABNT = obterDadosABNT(soup, url)
 
     try:
@@ -352,13 +358,13 @@ def citacaoInLine(soup, url, pasta):
                 dadosPorPasta[pasta].append(dadosABNT)
 
                 dadosBibliograficos = dadosPorPasta[pasta]
-                bibliografia = criarBibliografia(dadosBibliograficos, pasta)
+                bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
                 
 
 
         else:
             dadosPorPasta[pasta] = [dadosABNT]  # Cria a lista com o primeiro item
-            bibliografia = criarBibliografia(dadosBibliograficos, pasta)
+            bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
 
             
             bibliografia.register(citacao)
@@ -368,7 +374,7 @@ def citacaoInLine(soup, url, pasta):
         try:
             bibliografia = bibliografiasPorPasta[pasta]
         except KeyError:
-            bibliografia = criarBibliografia(dadosBibliograficos, pasta)
+            bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
 
         #print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
 
@@ -379,38 +385,6 @@ def citacaoInLine(soup, url, pasta):
         return bibliografia.cite(citacao, lambda x: None)
     except Exception as excecao:
         raise excecao
-
-        """pedacosCitacaoInLine = []
-
-        pedacosCitacaoInLine.append('(')
-
-        anoPublicacao = dadosABNT.get('issued')
-        autor = dadosABNT.get('author')
-        
-        if isinstance(autor, list):
-            if len(autor) > 3:
-                texto = f"{autor[0].get('family')} et al., "
-                pedacosCitacaoInLine.append(texto)
-            else:
-                for i in range(2):
-                    texto = f"{autor[i].get('family')}, "
-                    pedacosCitacaoInLine.append(texto)
-
-        else:
-            sobrenome = autor.get('family')
-            pedacosCitacaoInLine.append(f"{autor.get('family')}, ")
-
-        pedacosCitacaoInLine.append(f"{anoPublicacao})")
-
-        citacaoInLine = "".join(pedacosCitacaoInLine)
-
-        return citacaoInLine"""
-
-
-    
-
-    
-    
 
     
     
@@ -438,16 +412,6 @@ def citacaoRef(pasta, url):
     except Exception as excecao:
         raise excecao
     
-
-    """if (dadosABNT.get('author') or dadosABNT.get('title') == None):
-        if soup.find('div', class_='citacao-txt'):
-            citacao_abnt = (soup.find('div', class_='citacao-txt')).get_text().strip()
-
-        elif soup.find('p', class_='citation'):
-            citacao_abnt = (soup.find('p', class_='citation')).get_text().strip()
-
-    if citacao_abnt:
-        return citacao_abnt"""
     
     return "Nenhuma referência encontrada."
 

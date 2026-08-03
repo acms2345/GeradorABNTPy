@@ -1,4 +1,5 @@
-from geradorabnt.core import citacaoInLine, citacaoRef
+from geradorabnt import citacaoInLine, citacaoRef
+from citeproc import formatter
 import requests
 import re
 import unicodedata
@@ -35,7 +36,7 @@ while True:
 
 
 
-            print(citacaoInLine(soup, url, pasta))
+            print(citacaoInLine(soup, url, pasta, formatador=formatter.plain))
             print(citacaoRef(pasta, url))
         else:
             print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
