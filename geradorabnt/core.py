@@ -83,7 +83,7 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                     if not nomeCompleto:
                         continue
 
-                    if autorIndividual.get('@type') == 'Organization':
+                    if (autorIndividual.get('@type') == 'Organization') or (nomeCompleto.strip().lower() == nomeSite.strip().lower()):
                         tipo_autor = 'Organization'
 
                         nomeCompleto = nomeCompleto.upper()
@@ -111,7 +111,7 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                 if nomeCompleto:
                     
 
-                    if tipo_autor == 'Organization':
+                    if tipo_autor == 'Organization' or (nomeCompleto.strip().lower() == nomeSite.strip().lower()):
                         nomeCompleto = nomeCompleto.upper()
                         autor.append({
                             'literal' : nomeCompleto
