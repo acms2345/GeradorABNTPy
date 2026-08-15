@@ -32,6 +32,8 @@ def carregarJSONLD(jsonldsPuros):
 
 def obterTituloABNT(soup, dadosJSONSite):
     if dadosJSONSite:
+        if dadosJSONSite.get('name'):
+            return dadosJSONSite.get('name')
         if dadosJSONSite.get('headline'):
             return dadosJSONSite.get('headline')
     if soup.find('h1'):
@@ -48,26 +50,6 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
     autor = []
 
     tipo_autor = None
-
-    if nomeSite is not None:
-        #A seguir: verificação de sites institucionais
-        tlds_institucionais = [
-            ".gov.br",
-            ".gov",
-            ".edu.br",
-            ".edu",
-            ".org.br",
-            ".org",
-            ".jus.br",
-            ".leg.br",
-        ]
-        dominioURL = urlparse(url=urlSite).netloc.lower()
-
-        if any(dominioURL.endswith(tld) for tld in tlds_institucionais):
-            autor.append({'literal' : nomeSite})
-
-            return autor
-
 
         
     if dadosSite:
@@ -189,6 +171,23 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                     'family' : autorSobrenome,
                     'given' : autorNomeResto
                 })
+
+    if autor == [] and nomeSite is not None:
+        #A seguir: verificação de sites institucionais
+        tlds_institucionais = [
+            ".gov.br",
+            ".gov",
+            ".edu.br",
+            ".edu",
+            ".jus.br",
+            ".leg.br",
+        ]
+        dominioURL = urlparse(url=urlSite).netloc.lower()
+
+        if any(dominioURL.endswith(tld) for tld in tlds_institucionais):
+            autor.append({'literal' : nomeSite})
+
+            return autor
 
     return autor
 
