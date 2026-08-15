@@ -110,12 +110,17 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
 
                 if nomeCompleto:
                     
-
-                    if tipo_autor == 'Organization' or (nomeCompleto.strip().lower() == nomeSite.strip().lower()):
+                    nomeSiteNorm = (nomeSite or '').strip().lower()
+                    if tipo_autor == 'Organization' or (nomeSite is not None and nomeCompleto.strip().lower() == nomeSite.strip().lower()):
                         nomeCompleto = nomeCompleto.upper()
                         autor.append({
                             'literal' : nomeCompleto
                         })
+                    elif nomeSiteNorm and nomeSiteNorm in nomeCompleto:
+                        autor.append({
+                            'literal' : nomeSite.upper()
+                        })
+
                     else:
                         autorPartesNome = nomeCompleto.strip().split()
                         autorSobrenome = autorPartesNome[-1].upper()
@@ -130,6 +135,7 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
     if autor == []:
 
         seletores_meta = [
+        {'name': 'citation_author'},
         {'name': 'author'},
         {'property': 'article:author'}]
 
@@ -217,21 +223,30 @@ def obterAnoPublicacao(dadosJSONSite, soup):
                     pass
 
     #Se a verificação do JSON-LD falhar... Observa-se os metadados.
-    meta_site = soup.find("meta", property="article:published_time")
 
-    if meta_site:
-        anoPublicacao = meta_site.get("content")
-        if isinstance(anoPublicacao, (int, float)):
-            return int(anoPublicacao)  
-        elif isinstance(anoPublicacao, str):
-            verificacao = re.search(r'\d{4}', anoPublicacao)
-            if verificacao:
-                return int(verificacao.group(0))
-            else:
-                try:
-                    return datetime.fromisoformat(anoPublicacao).year
-                except:
-                    pass  
+    metaDadosPossiveisData = [
+        {'name': 'citation_publication_date'},
+        {'name': 'citation_date'},
+        {'property': 'article:published_time'},
+    ]
+    for metadado in metaDadosPossiveisData:
+        meta_site = soup.find("meta", attrs=metadado)
+
+        if meta_site:
+            anoPublicacao = meta_site.get("content")
+            if isinstance(anoPublicacao, (int, float)):
+                return int(anoPublicacao)  
+            elif isinstance(anoPublicacao, str):
+                verificacao = re.search(r'\d{4}', anoPublicacao)
+                if verificacao:
+                    return int(verificacao.group(0))
+                else:
+                    try:
+                        return datetime.fromisoformat(anoPublicacao).year
+                    except:
+                        pass
+        else: 
+            continue
         
     #Se tudo falhar...
     return None
