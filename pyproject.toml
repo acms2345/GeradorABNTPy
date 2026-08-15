@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geradorabntpy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Gerador de referências ABNT a partir de URLs"
 requires-python = ">=3.9"
 readme = "README.md"
