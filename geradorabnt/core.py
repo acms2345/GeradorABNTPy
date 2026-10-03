@@ -29,6 +29,62 @@ def carregarJSONLD(jsonldsPuros):
     
     return listaJSONLDs
 
+def obterDOI(soup: BeautifulSoup, dadosJSONLDSite):
+    def verificarDOIdeStr(texto):
+        if not isinstance(texto, str):
+            return None
+        texto_limpo = texto.replace('https://doi.org/', '').replace('http://doi.org/', '').replace('doi.org/', '')
+        match = PADRAO_DOI.search(texto_limpo)
+        return match.group(0) if match else None
+
+    
+    if dadosJSONLDSite:
+        PADRAO_DOI = re.compile(r'10\.\d{4,9}/[-._;()/:A-Za-z0-9]+')
+
+        candidatos = [] #Possíveis campos para encontrar o DOI
+
+        identifierMeta = dadosJSONLDSite.get('identifier')
+        if isinstance(identifierMeta, dict):
+            candidatos.append(identifierMeta.get('value'))
+        elif isinstance(identifierMeta, str):
+            candidatos.append(identifierMeta)
+
+        if dadosJSONLDSite.get('@id'):
+            candidatos.append(dadosJSONLDSite.get('@id'))
+        if dadosJSONLDSite.get('sameAs'):
+            candidatos.append(dadosJSONLDSite.get('sameAs'))
+
+        for candidato in candidatos:
+            verificacaoDOI = verificarDOIdeStr(candidato)
+            if verificacaoDOI is not None:
+                return verificacaoDOI 
+    
+    metadadoDOI = soup.find('meta', attrs={'name': 'citation_doi'})
+
+    if metadadoDOI:
+        return metadadoDOI.get('content')
+
+    return None
+
+
+def obterTipoCitacao(dadosJSONSite):
+    '''Identifica o tipo de citação (para artigos, para sites, etc.) que deve ser usado
+    para esse site.
+    
+    De acordo com os tipos declarados no CSL.'''
+
+    MAPEAMENTOTIPOSCITACAO = {
+        "NewsArticle": "article-newspaper",
+        "ScholarlyArticle": "article-journal",
+        "BlogPosting": "post-weblog"
+    }
+    if dadosJSONSite:
+        if dadosJSONSite.get('@type'):
+            tipoCitacaoDeclarado = dadosJSONSite.get('@type')
+            if tipoCitacaoDeclarado in MAPEAMENTOTIPOSCITACAO:
+                return MAPEAMENTOTIPOSCITACAO[tipoCitacaoDeclarado]
+
+        return 'webpage'
 
 def obterTituloABNT(soup, dadosJSONSite):
     if dadosJSONSite:
@@ -264,7 +320,8 @@ def obterDadosABNT(soup, urlSite):
     'URL' : urlSite,
     'container-title' : nomeSite,
     'type' : "webpage",
-    'id' : urlSite
+    'id' : urlSite,
+    'type': tipoCitacao (como exatamente a citação deve ser organizada)
     
     Esses são retornados em um dicionário 
     (para compatibilidade com o citeproc e o CSL).
@@ -304,8 +361,9 @@ def obterDadosABNT(soup, urlSite):
                             break
             
             if dadosSite is not None: break
-            
 
+    doi = obterDOI(soup, dadosSite)      
+    tipoCitacao = obterTipoCitacao(dadosSite)
     tituloCompleto = obterTituloABNT(soup, dadosSite)
     nomeSite = obterNomeSiteABNT(soup, dadosSite)
     anoPublicacao = obterAnoPublicacao(dadosSite, soup)
@@ -321,7 +379,7 @@ def obterDadosABNT(soup, urlSite):
             "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
             "URL" : urlSite,
             "container-title" : nomeSite,
-            "type" : "webpage",
+            "type" : tipoCitacao,
             "id" : urlSite.lower()
         }
     else:
@@ -332,7 +390,7 @@ def obterDadosABNT(soup, urlSite):
             "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
             "URL" : urlSite,
             "container-title" : nomeSite,
-            "type" : "webpage",
+            "type" : tipoCitacao,
             "id" : urlSite.lower()
         }
 
@@ -355,7 +413,7 @@ def criarBibliografia(dados_json, idBibliografia, formatador=formatter.plain):
     return bibliografia
 
 
-def citacaoInLine(soup, url, pasta, formatador=formatter.plain):
+def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatter.plain):
     dadosABNT = obterDadosABNT(soup, url)
 
     try:
@@ -403,7 +461,7 @@ def citacaoInLine(soup, url, pasta, formatador=formatter.plain):
     
     
 
-def citacaoRef(pasta, url):
+def citacaoRef(pasta: str, url: str):
     try:
         bibliografia = bibliografiasPorPasta[pasta]
         if bibliografia is None:
