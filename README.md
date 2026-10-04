@@ -16,6 +16,15 @@ Os arquivos atuais são:
 - `geradorabnt.py`: O "coração" do sistema. Ele possui todas as funções necessárias para a extração web e a montagem das citações.
 - `play.py`: O exemplo de uso e obtenção das citações por meio do `geradorabnt.py`.
 
+### "Como usar no seu código Python?"
+
+O código está adaptado para ser usado anexado a outros códigos. Basta instalar o repositório (ou a pasta `geradorabnt`) e importar para seu código:
+```python
+from geradorabnt import citacaoInLine, citacaoRef
+```
+Ou `limparPasta()`, a depender de sua demanda.
+Recomendo conferir o exemplo de uso presente em `play.py`.
+
 ## Limitações conhecidas
 - Alguns sites, como Gov.br, IBGE e outros não podem ser acessados pelo sistema por bloqueio de acesso de robôs.
 - Atualmente, o algoritmo apenas faz o formato de referência para sites e posts online.

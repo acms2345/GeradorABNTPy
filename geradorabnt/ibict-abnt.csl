@@ -64,13 +64,15 @@
     <group delimiter=". ">
       <choose>
         <if variable="URL DOI" match="all">
-          <group delimiter=": ">
-            <text value="doi" text-case="uppercase"/>
-            <text variable="DOI" prefix="https://doi.org/"/>
-          </group>
-          <group delimiter=": ">
-            <text term="available at" text-case="capitalize-first"/>
-            <text variable="URL"/>
+          <group delimiter=". ">
+            <group delimiter=": ">
+              <text value="doi" text-case="uppercase"/>
+              <text variable="DOI" prefix="https://doi.org/"/>
+            </group>
+            <group delimiter=": ">
+              <text term="available at" text-case="capitalize-first"/>
+              <text variable="URL"/>
+            </group>
           </group>
         </if>
         <else-if variable="URL" match="any">

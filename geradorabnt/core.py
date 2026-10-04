@@ -66,12 +66,28 @@ def obterDOI(soup: BeautifulSoup, dadosJSONLDSite):
 
     return None
 
+def obterVolumeArtigo(soup: BeautifulSoup):
+    metaCitVolume = soup.find('meta', attrs={'name': 'citation_volume'})
+    if metaCitVolume is not None:
+        return metaCitVolume.get('content')
 
-def obterTipoCitacao(dadosJSONSite):
+    return None
+
+def obterPublicadorArtigo(soup: BeautifulSoup):
+    metaCitPublisher = soup.find('meta', attrs={'name': 'citation_publisher'})
+    if metaCitPublisher:
+        return metaCitPublisher.get('content')
+
+    return None
+
+def obterTipoCitacao(dadosJSONSite, soup: BeautifulSoup, doiObtido, tipoSolicitado):
     '''Identifica o tipo de citação (para artigos, para sites, etc.) que deve ser usado
     para esse site.
     
     De acordo com os tipos declarados no CSL.'''
+
+    if tipoSolicitado is not None:
+        return tipoSolicitado
 
     MAPEAMENTOTIPOSCITACAO = {
         "NewsArticle": "article-newspaper",
@@ -84,9 +100,24 @@ def obterTipoCitacao(dadosJSONSite):
             if tipoCitacaoDeclarado in MAPEAMENTOTIPOSCITACAO:
                 return MAPEAMENTOTIPOSCITACAO[tipoCitacaoDeclarado]
 
-        return 'webpage'
+    metaCitDissert = soup.find('meta', attrs={'name': 'citation_dissertation_institution'})
+    if metaCitDissert is not None:
+        return "thesis"
+    
+    metaCitTechnReport = soup.find('meta', attrs={'name': 'citation_technical_report_institution'})
+    if metaCitTechnReport is not None:
+        return "report"
+    
+    if doiObtido is not None or soup.find('meta', attrs={'name': 'citation_journal_title'}):
+        return "article-journal"
+    
 
-def obterTituloABNT(soup, dadosJSONSite):
+    return 'webpage' #Fallback padrão
+
+def obterTituloABNT(soup: BeautifulSoup, dadosJSONSite):
+    metaCitTitle = soup.find('meta', attrs={'name': 'citation_title'})
+    if metaCitTitle:
+        return metaCitTitle.get('content')
     if dadosJSONSite:
         if dadosJSONSite.get('name'):
             return dadosJSONSite.get('name')
@@ -262,7 +293,7 @@ def obterNomeSiteABNT(soup, dadosJSONSite):
         nome_site = meta_site.get("content")
         return nome_site
     
-def obterAnoPublicacao(dadosJSONSite, soup):
+def obterAnoPublicacao(dadosJSONSite, soup: BeautifulSoup):
     if dadosJSONSite:
         dataPublicacao = dadosJSONSite.get('datePublished')
         if dataPublicacao:
@@ -307,27 +338,29 @@ def obterAnoPublicacao(dadosJSONSite, soup):
     return None
 
 
-def obterDadosABNT(soup, urlSite):
+def obterDadosABNT(soup, urlSite, tipoCitacaoSolicitado):
     """
     A presente função coleta os dados necessários para criar a
     citação, conforme o solicitado no CSL.
 
     Os dados obtidos são:
 
-    'author' : autor,
-    'title' : tituloCompleto, 
-    'accessed' : {a data de acesso - informações no modelo ano-mês-dia}, 
-    'URL' : urlSite,
-    'container-title' : nomeSite,
-    'type' : "webpage",
-    'id' : urlSite,
-    'type': tipoCitacao (como exatamente a citação deve ser organizada)
+        'author' : autor,
+        'title' : tituloCompleto, 
+        'accessed' : {a data de acesso - informações no modelo ano-mês-dia}, 
+        'URL' : urlSite,
+        'container-title' : nomeSite,
+        'id' : urlSite,
+        'type': tipoCitacao (como exatamente a citação deve ser organizada)
+
+        'DOI',
+        'publisher' : publicadorArtigo
     
     Esses são retornados em um dicionário 
     (para compatibilidade com o citeproc e o CSL).
 
     Primeiro, é feita a análise para saber se o site possui um JSON-LD, 
-    arquivo de indexação que pode servir como base de obtenção.
+    arquivo de indexação de busca que pode servir como base de obtenção.
     Se tiver, coleta-se as informações com base nele.
 
     Senão, há o fallback individual para cada informação.
@@ -362,37 +395,43 @@ def obterDadosABNT(soup, urlSite):
             
             if dadosSite is not None: break
 
-    doi = obterDOI(soup, dadosSite)      
-    tipoCitacao = obterTipoCitacao(dadosSite)
+    doi = obterDOI(soup, dadosSite)  
+    publicadorArtigo = obterPublicadorArtigo(soup)
+    volumeArtigo = obterVolumeArtigo(soup)
+
+    tipoCitacao = obterTipoCitacao(dadosSite, soup, doiObtido=doi, tipoSolicitado=tipoCitacaoSolicitado)
     tituloCompleto = obterTituloABNT(soup, dadosSite)
     nomeSite = obterNomeSiteABNT(soup, dadosSite)
     anoPublicacao = obterAnoPublicacao(dadosSite, soup)
     autor = obterAutorABNT(soup, dadosSite, nomeSite, urlSite)
         
     dataAcessoInfo = date.today()        
-        
-    
-    if anoPublicacao == None:
-        return {
-            "author" : autor,
-            "title" : tituloCompleto, 
-            "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
-            "URL" : urlSite,
-            "container-title" : nomeSite,
-            "type" : tipoCitacao,
-            "id" : urlSite.lower()
-        }
-    else:
-        return {
-            "author" : autor, 
-            "title" : tituloCompleto, 
-            "issued" : {"date-parts" : [[anoPublicacao]]}, 
-            "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
-            "URL" : urlSite,
-            "container-title" : nomeSite,
-            "type" : tipoCitacao,
-            "id" : urlSite.lower()
-        }
+
+       
+    #Montagem da lista para retorno
+
+    dados = {
+        "author" : autor,
+        "title" : tituloCompleto, 
+        "accessed" : {"date-parts": [[dataAcessoInfo.year, dataAcessoInfo.month, dataAcessoInfo.day]]}, 
+        "URL" : urlSite,
+        "publisher" : publicadorArtigo,
+        "container-title" : nomeSite,
+        "type" : tipoCitacao,
+        "id" : urlSite.lower()
+    }
+
+    if anoPublicacao is not None:
+        dados['issued'] = {"date-parts" : [[anoPublicacao]]}
+
+    if doi is not None:
+        dados["DOI"] = doi
+
+    if volumeArtigo is not None:
+        dados['volume'] = volumeArtigo
+
+    return dados
+
 
 bibliografiasPorPasta = {} 
 dadosPorPasta = {} 
@@ -413,8 +452,8 @@ def criarBibliografia(dados_json, idBibliografia, formatador=formatter.plain):
     return bibliografia
 
 
-def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatter.plain):
-    dadosABNT = obterDadosABNT(soup, url)
+def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatter.plain, tipoCitacao=None):
+    dadosABNT = obterDadosABNT(soup, url, tipoCitacaoSolicitado=tipoCitacao)
 
     try:
 
@@ -462,6 +501,9 @@ def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatte
     
 
 def citacaoRef(pasta: str, url: str):
+    """Retorna a referência bibliográfica do site.
+    
+    Por pormenores da biblioteca usada, ela SEMPRE deve ser usada DEPOIS da `citacaoInLine()`."""
     try:
         bibliografia = bibliografiasPorPasta[pasta]
         if bibliografia is None:
