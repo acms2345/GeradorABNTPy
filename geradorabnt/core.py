@@ -80,16 +80,38 @@ def obterPublicadorArtigo(soup: BeautifulSoup):
 
     return None
 
-def obterTipoCitacao(dadosJSONSite, soup: BeautifulSoup, doiObtido, tipoSolicitado):
+from typing import Literal, TypeAlias
+
+TipoCitacao: TypeAlias = Literal[
+    "article-newspaper",
+    "article-journal",
+    "post-weblog",
+    "thesis",
+    "report",
+    "webpage",
+]
+TIPOS_CITACAO = {
+    "article-newspaper",
+    "article-journal",
+    "post-weblog",
+    "thesis",
+    "report",
+    "webpage",
+}
+
+def obterTipoCitacao(dadosJSONSite, soup: BeautifulSoup, doiObtido: str | None=None, tipoSolicitado: TipoCitacao |None=None):
     '''Identifica o tipo de citação (para artigos, para sites, etc.) que deve ser usado
     para esse site.
     
     De acordo com os tipos declarados no CSL.'''
 
     if tipoSolicitado is not None:
-        return tipoSolicitado
+        if tipoSolicitado in TIPOS_CITACAO:
+            return tipoSolicitado
 
-    MAPEAMENTOTIPOSCITACAO = {
+        print("Erro: o tipo de citação solicitado não será usado. Verifique erros de digitação.")
+
+    MAPEAMENTOTIPOSCITACAO: dict[str, TipoCitacao] = {
         "NewsArticle": "article-newspaper",
         "ScholarlyArticle": "article-journal",
         "BlogPosting": "post-weblog"
@@ -134,6 +156,98 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
     
     - Para autores: family: sobrenome e given : restanteDoNome
     - Para organizações: literal: nome """
+
+    def repartirNomeAutor(
+        nome: str | None = None,
+        given_name: str | None = None,
+        family_name: str | None = None,
+        tipo: str | None = None,
+    ) -> dict[str, str] | None:
+        def limpar(valor: str | None) -> str:
+            return valor.strip() if isinstance(valor, str) else ""
+
+        nome = limpar(nome)
+        given_name = limpar(given_name)
+        family_name = limpar(family_name)
+        tipo = limpar(tipo)
+
+        if not nome and not given_name and not family_name:
+            return None
+
+        if tipo.lower() == "organization":
+            valor_literal = nome or " ".join(
+                parte for parte in (given_name, family_name) if parte
+            )
+            return {"literal": valor_literal.upper()}
+
+        campos_separados_validos = (
+            bool(given_name)
+            and bool(family_name)
+            and "," not in given_name
+            and "," not in family_name
+            and not (
+                nome
+                and " ".join((given_name, family_name)).casefold()
+                == nome.casefold()
+            )
+        )
+
+        if campos_separados_validos:
+            return {
+                "family": family_name.upper(),
+                "given": given_name,
+            }
+
+        if not nome:
+            nome = " ".join(
+                parte for parte in (given_name, family_name) if parte
+            )
+
+        if not nome:
+            return None
+
+        if "," in nome:
+            parte_sobrenome, parte_nome = nome.split(",", 1)
+
+            parte_sobrenome = parte_sobrenome.strip()
+            parte_nome = parte_nome.strip()
+
+            if not parte_sobrenome or not parte_nome:
+                return None
+
+            # Exceção: "João Silva, Jr." não deve ser tratado como
+            # "Sobrenome, Nome".
+            if parte_nome.casefold() in {
+                "jr",
+                "jr.",
+                "filho",
+                "neto",
+                "sobrinho",
+            }:
+                tokens = nome.split()
+                if len(tokens) < 2:
+                    return None
+
+                return {
+                    "family": tokens[-1].upper(),
+                    "given": " ".join(tokens[:-1]),
+                }
+
+            return {
+                "family": parte_sobrenome.upper(),
+                "given": parte_nome,
+            }
+
+        tokens = nome.split()
+
+        if len(tokens) == 1:
+            return {"family": tokens[0].upper(), "given": ""}
+
+        return {
+            "family": tokens[-1].upper(),
+            "given": " ".join(tokens[:-1]),
+        }
+
     autor = []
 
     tipo_autor = None
@@ -148,11 +262,12 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                 for autorIndividual in autorDados:
                     
                     nomeCompleto = autorIndividual.get('name')
+                    givenName = autorIndividual.get('givenName')
+                    familyName = autorIndividual.get('familyName')
 
-                    if not nomeCompleto:
-                        continue
+                    tipo_autor = autorIndividual.get('@type')
 
-                    if (autorIndividual.get('@type') == 'Organization') or (nomeCompleto.strip().lower() == nomeSite.strip().lower()):
+                    if nomeCompleto is not None and ((tipo_autor == 'Organization') or (nomeCompleto.strip().lower() == nomeSite.strip().lower())):
                         tipo_autor = 'Organization'
 
                         nomeCompleto = nomeCompleto.upper()
@@ -163,19 +278,27 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                 
                 
                     
-                    autorPartesNome = nomeCompleto.strip().split()
-                    autorSobrenome = autorPartesNome[-1].upper()
-                    autorNomeResto = " ".join(autorPartesNome[:-1])
+                    # autorPartesNome = nomeCompleto.strip().split()
+                    # autorSobrenome = autorPartesNome[-1].upper()
+                    # autorNomeResto = " ".join(autorPartesNome[:-1])
 
 
-                    autor.append({
-                        'family' : autorSobrenome,
-                        'given' : autorNomeResto
-                    })
+                    # autor.append({
+                    #     'family' : autorSobrenome,
+                    #     'given' : autorNomeResto
+                    # })
+                    dictAutor = repartirNomeAutor(nomeCompleto, tipo=tipo_autor, given_name=givenName, family_name=familyName)
+
+                    if dictAutor is not None: 
+                        autor.append(dictAutor) 
+                    else: continue
+        
             if isinstance(autorDados, dict):
                 tipo_autor = autorDados.get('@type')
                 
                 nomeCompleto = autorDados.get('name')
+                givenName = autorDados.get('givenName')
+                familyName = autorDados.get('familyName')
 
                 if nomeCompleto:
                     
@@ -190,15 +313,20 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                             'literal' : nomeSite.upper()
                         })
 
-                    else:
-                        autorPartesNome = nomeCompleto.strip().split()
-                        autorSobrenome = autorPartesNome[-1].upper()
-                        autorNomeResto = " ".join(autorPartesNome[:-1])
+                    # else:
+                    #     autorPartesNome = nomeCompleto.strip().split()
+                    #     autorSobrenome = autorPartesNome[-1].upper()
+                    #     autorNomeResto = " ".join(autorPartesNome[:-1])
 
-                        autor.append({
-                            'family' : autorSobrenome,
-                            'given' : autorNomeResto
-                        })
+                    #     autor.append({
+                    #         'family' : autorSobrenome,
+                    #         'given' : autorNomeResto
+                    #     })
+                dictAutor = repartirNomeAutor(nomeCompleto, tipo=tipo_autor, given_name=givenName, family_name=familyName)
+                
+                if dictAutor is not None: 
+                    autor.append(dictAutor)
+                
     
     #Se, mesmo após a verificação do JSON-LD acima, os dados ainda não foram preenchidos...
     if autor == []:
@@ -209,15 +337,23 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
         {'property': 'article:author'}]
 
         for seletor in seletores_meta:
-            metadadosAutor = soup.find('meta', attrs=seletor)
-            if metadadosAutor and metadadosAutor.get('content'):
+            # Conversão para lista, para verificar vários autores na mesma página
+            if seletor == {'name': 'citation_author'}:
+                metadadosAutores = soup.find_all('meta', attrs=seletor)
+            else:
+                metadado = soup.find('meta', attrs=seletor)
+                metadadosAutores = [metadado] if metadado is not None else []
+            for metadadosAutor in metadadosAutores:
+                if not metadadosAutor or not metadadosAutor.get('content'):
+                    continue
+
                 nomeAutorTeste = metadadosAutor.get('content')
                 if seletor == {'property': 'article:author'}:
                     if nomeAutorTeste.startswith(('http://', 'https://')):
                         continue
                 # Se tem vírgula, pega só a primeira parte
                 padrao_limpeza = r",\s*(do jornal|da redação|correspondente|colunista|enviado|especial|o|a)\b.*"
-    
+
                 # Substitui o padrão por nada e limpa espaços extras nas pontas
                 nomeAutorTesteLimpo = re.sub(padrao_limpeza, "", nomeAutorTeste, flags=re.IGNORECASE).strip()
 
@@ -250,14 +386,10 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
                     continue
                 
                 
-                autorPartesNome = nomeAutorTesteLimpo.split()
-                autorSobrenome = autorPartesNome[-1].upper()
-                autorNomeResto = " ".join(autorPartesNome[:-1])
-
-                autor.append({
-                    'family' : autorSobrenome,
-                    'given' : autorNomeResto
-                })
+                dictAutor = repartirNomeAutor(nome=nomeAutorTesteLimpo)
+                                
+                if dictAutor is not None: 
+                    autor.append(dictAutor)
 
     if autor == [] and nomeSite is not None:
         #A seguir: verificação de sites institucionais
@@ -338,7 +470,7 @@ def obterAnoPublicacao(dadosJSONSite, soup: BeautifulSoup):
     return None
 
 
-def obterDadosABNT(soup, urlSite, tipoCitacaoSolicitado):
+def obterDadosABNT(soup, urlSite, tipoCitacaoSolicitado: TipoCitacao | None=None):
     """
     A presente função coleta os dados necessários para criar a
     citação, conforme o solicitado no CSL.
@@ -452,7 +584,7 @@ def criarBibliografia(dados_json, idBibliografia, formatador=formatter.plain):
     return bibliografia
 
 
-def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatter.plain, tipoCitacao=None):
+def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatter.plain, tipoCitacao: TipoCitacao | None=None, debug: bool = False):
     dadosABNT = obterDadosABNT(soup, url, tipoCitacaoSolicitado=tipoCitacao)
 
     try:
@@ -487,7 +619,8 @@ def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatte
         except KeyError:
             bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
 
-        #print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
+        if debug:
+            print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
 
         
         citacao = Citation([CitationItem(id)])
@@ -532,5 +665,5 @@ def citacaoRef(pasta: str, url: str):
 def limparPasta(pasta):
     dadosPorPasta.pop(pasta, None)
     bibliografiasPorPasta.pop(pasta, None)
-    
+
 
