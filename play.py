@@ -36,8 +36,8 @@ while True:
 
 
 
-            print(citacaoInLine(soup, url, pasta, formatador=formatter.plain, debug=True))
-            print(citacaoRef(pasta, url))
+            print(citacaoInLine(soup, url, pasta, formatador=formatter.plain))
+            print(citacaoRef(pasta=pasta, url=url))
         else:
             print(f"Erro ao ler fonte. Código do erro: {doc.status_code}")
     except (TypeError, AttributeError, KeyError) as excecao:

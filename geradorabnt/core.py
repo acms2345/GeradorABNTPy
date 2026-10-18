@@ -1,4 +1,3 @@
-import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
@@ -13,9 +12,14 @@ from citeproc.source.json import CiteProcJSON
 
 from importlib.resources import files
 
+import unicodedata
+
+from typing import Literal, TypeAlias
+
+
+
 CAMINHO_CSL = files("geradorabnt").joinpath("ibict-abnt.csl")
 
-import unicodedata
 
 def carregarJSONLD(jsonldsPuros):
     listaJSONLDs = []
@@ -79,8 +83,6 @@ def obterPublicadorArtigo(soup: BeautifulSoup):
         return metaCitPublisher.get('content')
 
     return None
-
-from typing import Literal, TypeAlias
 
 TipoCitacao: TypeAlias = Literal[
     "article-newspaper",
@@ -151,7 +153,7 @@ def obterTituloABNT(soup: BeautifulSoup, dadosJSONSite):
     #Se tudo falhar...
     return (soup.title).get_text()
 
-def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
+def obterAutorABNT(soup: BeautifulSoup, dadosSite, nomeSite: str | None = None, urlSite: str | None = None):
     """Essa função deve retornar o que o ibict-abnt.csl espera:
     
     - Para autores: family: sobrenome e given : restanteDoNome
@@ -411,12 +413,39 @@ def obterAutorABNT(soup, dadosSite, nomeSite, urlSite):
     return autor
 
         
-def obterNomeSiteABNT(soup, dadosJSONSite):
+def obterContainerTitleABNT(soup: BeautifulSoup, dadosJSONSite, tipoCitacao: TipoCitacao):
+    '''Essa função obtém o título da obra maior que contém o item citado. 
+    O que ela guarda depende do tipo:
+
+    - `article-journal`: nome do periódico
+    - `article-newspaper`: nome do jornal
+    - webpage e post-weblog: nome do site ou blog
+    - thesis e report: não utiliza esse campo.
+        '''
+
+    if tipoCitacao in ('thesis', 'report'):
+        return None
+    elif tipoCitacao == 'article-journal':
+        metaCitJournalTitle = soup.find('meta', attrs={'name': 'citation_journal_title'})
+        if metaCitJournalTitle:
+            return metaCitJournalTitle.get('content')
+    
     if dadosJSONSite:
-        nomeSiteDados = dadosJSONSite.get('publisher', {})
-        if nomeSiteDados:
-            return nomeSiteDados.get('name')
-        elif dadosJSONSite.get('name'):
+        nomeSiteDados = dadosJSONSite.get('publisher')
+
+        if isinstance(nomeSiteDados, str) and nomeSiteDados.strip():
+            return nomeSiteDados.strip()
+
+        if isinstance(nomeSiteDados, list):
+            nomeSiteDados = nomeSiteDados[0] if nomeSiteDados else None
+            return nomeSiteDados.strip() if nomeSiteDados.strip() else None
+
+        if isinstance(nomeSiteDados, dict):
+            publisherName = nomeSiteDados.get('name')
+            if publisherName:
+                return publisherName
+            
+        if dadosJSONSite.get('name'):
             return dadosJSONSite.get('name')
     
     meta_site = soup.find("meta", property="og:site_name")
@@ -470,7 +499,7 @@ def obterAnoPublicacao(dadosJSONSite, soup: BeautifulSoup):
     return None
 
 
-def obterDadosABNT(soup, urlSite, tipoCitacaoSolicitado: TipoCitacao | None=None):
+def obterDadosABNT(soup: BeautifulSoup, urlSite:str, tipoCitacaoSolicitado: TipoCitacao | None=None):
     """
     A presente função coleta os dados necessários para criar a
     citação, conforme o solicitado no CSL.
@@ -533,7 +562,7 @@ def obterDadosABNT(soup, urlSite, tipoCitacaoSolicitado: TipoCitacao | None=None
 
     tipoCitacao = obterTipoCitacao(dadosSite, soup, doiObtido=doi, tipoSolicitado=tipoCitacaoSolicitado)
     tituloCompleto = obterTituloABNT(soup, dadosSite)
-    nomeSite = obterNomeSiteABNT(soup, dadosSite)
+    nomeSite = obterContainerTitleABNT(soup=soup, dadosJSONSite=dadosSite, tipoCitacao=tipoCitacao)
     anoPublicacao = obterAnoPublicacao(dadosSite, soup)
     autor = obterAutorABNT(soup, dadosSite, nomeSite, urlSite)
         
@@ -585,7 +614,7 @@ def criarBibliografia(dados_json, idBibliografia, formatador=formatter.plain):
 
 
 def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatter.plain, tipoCitacao: TipoCitacao | None=None, debug: bool = False):
-    dadosABNT = obterDadosABNT(soup, url, tipoCitacaoSolicitado=tipoCitacao)
+    dadosABNT = obterDadosABNT(soup=soup, urlSite=url, tipoCitacaoSolicitado=tipoCitacao)
 
     try:
 
@@ -601,13 +630,13 @@ def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatte
                 dadosPorPasta[pasta].append(dadosABNT)
 
                 dadosBibliograficos = dadosPorPasta[pasta]
-                bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
+                bibliografia = criarBibliografia(dados_json=dadosBibliograficos, idBibliografia=pasta, formatador=formatador)
                 
 
 
         else:
             dadosPorPasta[pasta] = [dadosABNT]  # Cria a lista com o primeiro item
-            bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
+            bibliografia = criarBibliografia(dados_json=dadosBibliograficos, idBibliografia=pasta, formatador=formatador)
 
             
             bibliografia.register(citacao)
@@ -617,7 +646,7 @@ def citacaoInLine(soup: BeautifulSoup, url: str, pasta: str, formatador=formatte
         try:
             bibliografia = bibliografiasPorPasta[pasta]
         except KeyError:
-            bibliografia = criarBibliografia(dadosBibliograficos, pasta, formatador)
+            bibliografia = criarBibliografia(dados_json=dadosBibliograficos, idBibliografia=pasta, formatador=formatador)
 
         if debug:
             print("DEBUG dadosBibliograficos:", json.dumps(dadosBibliograficos, ensure_ascii=False, indent=2))
